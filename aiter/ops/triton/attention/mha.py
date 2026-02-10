@@ -166,7 +166,8 @@ def _flash_attn_forward(
         dropout_mask = None
 
     if config is None:
-        config = _get_config(enable_dropout, q.dtype, has_pe=pe_head_dim > 0)
+        config = _get_config(enable_dropout, q.dtype, has_pe=pe_head_dim > 0,
+                             max_seqlen_q=max_seqlen_q)
 
     """
     # Tuned for gfx942
