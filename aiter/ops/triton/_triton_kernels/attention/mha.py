@@ -882,6 +882,7 @@ def _get_config(
     enable_dropout: bool,
     dtype: torch.dtype,
     has_pe: bool = False,
+    max_seqlen_q: int = 0,
 ):
     if not hasattr(_get_config, "_config_dict"):
         dev = arch_info.get_arch()
@@ -899,5 +900,7 @@ def _get_config(
         return fwd_cfg["pe"]
     elif enable_dropout or dtype == torch.float32:
         return fwd_cfg["dropout_or_fp32"]
+    elif max_seqlen_q >= 8192 and "default_long_seqlen" in fwd_cfg:
+        return fwd_cfg["default_long_seqlen"]
     else:
         return fwd_cfg["default"]
