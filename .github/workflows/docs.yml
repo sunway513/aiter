@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - docs-website
   pull_request:
     branches:
       - main
@@ -59,7 +60,7 @@ jobs:
   deploy-docs:
     needs: build-docs
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/docs-website')
 
     permissions:
       contents: write  # For GitHub Pages deployment
