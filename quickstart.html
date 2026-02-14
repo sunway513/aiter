@@ -242,7 +242,15 @@ python3<span class="w"> </span>setup.py<span class="w"> </span>develop
 <section id="verify-installation">
 <h2>Verify Installation<a class="headerlink" href="#verify-installation" title="Link to this heading"></a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">aiter</span>
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;AITER version: </span><span class="si">{</span><span class="nb">aiter</span><span class="o">.</span><span class="n">__version__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="c1"># Verify AITER is working</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;PyTorch version: </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">__version__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ROCm available: </span><span class="si">{</span><span class="n">torch</span><span class="o">.</span><span class="n">cuda</span><span class="o">.</span><span class="n">is_available</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Try importing a key function</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">aiter</span><span class="w"> </span><span class="kn">import</span> <span class="n">flash_attn_func</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;AITER loaded successfully!&quot;</span><span class="p">)</span>
 </pre></div>
 </div>
 </section>
@@ -299,19 +307,31 @@ python3<span class="w"> </span>setup.py<span class="w"> </span>develop
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">aiter</span>
 
-<span class="c1"># Expert selection (batch_size * seq_len, top_k)</span>
-<span class="n">expert_ids</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randint</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="p">(</span><span class="mi">4096</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">)</span>
+<span class="c1"># MOE routing - select top-2 experts for each token</span>
+<span class="n">num_tokens</span> <span class="o">=</span> <span class="mi">4096</span>
+<span class="n">num_experts</span> <span class="o">=</span> <span class="mi">8</span>
+<span class="n">hidden_dim</span> <span class="o">=</span> <span class="mi">512</span>
+<span class="n">ffn_dim</span> <span class="o">=</span> <span class="mi">2048</span>
+<span class="n">top_k</span> <span class="o">=</span> <span class="mi">2</span>
 
 <span class="c1"># Input tokens</span>
-<span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">4096</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">)</span>
+<span class="n">x</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">num_tokens</span><span class="p">,</span> <span class="n">hidden_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">)</span>
 
-<span class="c1"># Expert weights (num_experts, hidden_dim, ffn_dim)</span>
-<span class="n">expert_weights</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">8</span><span class="p">,</span> <span class="mi">512</span><span class="p">,</span> <span class="mi">2048</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">)</span>
+<span class="c1"># Expert weights for all experts</span>
+<span class="n">w1</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">num_experts</span><span class="p">,</span> <span class="n">hidden_dim</span><span class="p">,</span> <span class="n">ffn_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">)</span>
+<span class="n">w2</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">num_experts</span><span class="p">,</span> <span class="n">ffn_dim</span><span class="p">,</span> <span class="n">hidden_dim</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">)</span>
 
-<span class="c1"># Grouped GEMM for MoE</span>
-<span class="n">output</span> <span class="o">=</span> <span class="nb">aiter</span><span class="o">.</span><span class="n">grouped_gemm</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">expert_weights</span><span class="p">,</span> <span class="n">expert_ids</span><span class="p">)</span>
+<span class="c1"># Router logits and expert selection</span>
+<span class="n">router_logits</span> <span class="o">=</span> <span class="n">torch</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="n">num_tokens</span><span class="p">,</span> <span class="n">num_experts</span><span class="p">,</span> <span class="n">device</span><span class="o">=</span><span class="s1">&#39;cuda&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">float16</span><span class="p">)</span>
 
-<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MoE output shape: </span><span class="si">{</span><span class="n">output</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="c1"># Fused MOE operation (gate + up projection + down projection)</span>
+<span class="n">output</span> <span class="o">=</span> <span class="nb">aiter</span><span class="o">.</span><span class="n">fmoe</span><span class="p">(</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">w1</span><span class="p">,</span> <span class="n">w2</span><span class="p">,</span> <span class="n">router_logits</span><span class="p">,</span>
+    <span class="n">topk</span><span class="o">=</span><span class="n">top_k</span><span class="p">,</span>
+    <span class="n">renormalize</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;MoE output shape: </span><span class="si">{</span><span class="n">output</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># [4096, 512]</span>
 </pre></div>
 </div>
 </section>

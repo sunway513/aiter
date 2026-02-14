@@ -19,7 +19,15 @@ Verify Installation
 .. code-block:: python
 
    import aiter
-   print(f"AITER version: {aiter.__version__}")
+   import torch
+
+   # Verify AITER is working
+   print(f"PyTorch version: {torch.__version__}")
+   print(f"ROCm available: {torch.cuda.is_available()}")
+
+   # Try importing a key function
+   from aiter import flash_attn_func
+   print("AITER loaded successfully!")
 
 First Example: Flash Attention
 -------------------------------
@@ -82,19 +90,31 @@ Efficient grouped GEMM for MoE layers:
    import torch
    import aiter
 
-   # Expert selection (batch_size * seq_len, top_k)
-   expert_ids = torch.randint(0, 8, (4096, 2), device='cuda')
+   # MOE routing - select top-2 experts for each token
+   num_tokens = 4096
+   num_experts = 8
+   hidden_dim = 512
+   ffn_dim = 2048
+   top_k = 2
 
    # Input tokens
-   x = torch.randn(4096, 512, device='cuda', dtype=torch.float16)
+   x = torch.randn(num_tokens, hidden_dim, device='cuda', dtype=torch.float16)
 
-   # Expert weights (num_experts, hidden_dim, ffn_dim)
-   expert_weights = torch.randn(8, 512, 2048, device='cuda', dtype=torch.float16)
+   # Expert weights for all experts
+   w1 = torch.randn(num_experts, hidden_dim, ffn_dim, device='cuda', dtype=torch.float16)
+   w2 = torch.randn(num_experts, ffn_dim, hidden_dim, device='cuda', dtype=torch.float16)
 
-   # Grouped GEMM for MoE
-   output = aiter.grouped_gemm(x, expert_weights, expert_ids)
+   # Router logits and expert selection
+   router_logits = torch.randn(num_tokens, num_experts, device='cuda', dtype=torch.float16)
 
-   print(f"MoE output shape: {output.shape}")
+   # Fused MOE operation (gate + up projection + down projection)
+   output = aiter.fmoe(
+       x, w1, w2, router_logits,
+       topk=top_k,
+       renormalize=True
+   )
+
+   print(f"MoE output shape: {output.shape}")  # [4096, 512]
 
 RMSNorm
 -------
