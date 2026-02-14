@@ -106,6 +106,38 @@
 <li class="toctree-l3"><a class="reference internal" href="basic_usage.html#common-gotchas">Common Gotchas</a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html">How to Add a New Operator</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#overview">Overview</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#step-1-define-the-operator-interface">Step 1: Define the Operator Interface</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#step-2-implement-the-rocm-kernel">Step 2: Implement the ROCm Kernel</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#step-3-create-python-bindings">Step 3: Create Python Bindings</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#step-4-update-build-configuration">Step 4: Update Build Configuration</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#step-5-add-tests">Step 5: Add Tests</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#step-6-build-and-install">Step 6: Build and Install</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#step-7-register-in-main-module">Step 7: Register in Main Module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#advanced-optimizations">Advanced: Optimizations</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="add_new_op.html#use-ck-composable-kernel-for-better-performance">Use CK (Composable Kernel) for Better Performance</a></li>
+<li class="toctree-l4"><a class="reference internal" href="add_new_op.html#use-triton-for-easier-kernel-development">Use Triton for Easier Kernel Development</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#common-patterns">Common Patterns</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="add_new_op.html#pattern-1-fused-operations">Pattern 1: Fused Operations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="add_new_op.html#pattern-2-in-place-operations">Pattern 2: In-Place Operations</a></li>
+<li class="toctree-l4"><a class="reference internal" href="add_new_op.html#pattern-3-autograd-support">Pattern 3: Autograd Support</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#best-practices">Best Practices</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#debugging-tips">Debugging Tips</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="add_new_op.html#print-kernel-launches">Print Kernel Launches</a></li>
+<li class="toctree-l4"><a class="reference internal" href="add_new_op.html#check-for-memory-errors">Check for Memory Errors</a></li>
+<li class="toctree-l4"><a class="reference internal" href="add_new_op.html#profile-your-operator">Profile Your Operator</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#example-complete-rmsnorm-implementation">Example: Complete RMSNorm Implementation</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#next-steps">Next Steps</a></li>
+<li class="toctree-l3"><a class="reference internal" href="add_new_op.html#contributing">Contributing</a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="#tutorial-overview">Tutorial Overview</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="#basic-tutorials">Basic Tutorials</a></li>
 <li class="toctree-l3"><a class="reference internal" href="#advanced-topics">Advanced Topics</a></li>
@@ -216,6 +248,27 @@
 </ul>
 </div>
 <div class="toctree-wrapper compound">
+<p class="caption" role="heading"><span class="caption-text">Advanced Topics</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="add_new_op.html">How to Add a New Operator</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#overview">Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#step-1-define-the-operator-interface">Step 1: Define the Operator Interface</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#step-2-implement-the-rocm-kernel">Step 2: Implement the ROCm Kernel</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#step-3-create-python-bindings">Step 3: Create Python Bindings</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#step-4-update-build-configuration">Step 4: Update Build Configuration</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#step-5-add-tests">Step 5: Add Tests</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#step-6-build-and-install">Step 6: Build and Install</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#step-7-register-in-main-module">Step 7: Register in Main Module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#advanced-optimizations">Advanced: Optimizations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#common-patterns">Common Patterns</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#best-practices">Best Practices</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#debugging-tips">Debugging Tips</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#example-complete-rmsnorm-implementation">Example: Complete RMSNorm Implementation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#next-steps">Next Steps</a></li>
+<li class="toctree-l2"><a class="reference internal" href="add_new_op.html#contributing">Contributing</a></li>
+</ul>
+</li>
+</ul>
 </div>
 <div class="toctree-wrapper compound">
 </div>
@@ -232,6 +285,7 @@
 <section id="advanced-topics">
 <h3>Advanced Topics<a class="headerlink" href="#advanced-topics" title="Link to this heading"></a></h3>
 <ul class="simple">
+<li><p><a class="reference internal" href="add_new_op.html"><span class="doc">How to Add a New Operator</span></a> - <strong>How to add a new operator</strong> (step-by-step guide)</p></li>
 <li><p><span class="xref std std-doc">moe_tutorial</span> - Mixture of Experts optimization</p></li>
 <li><p><span class="xref std std-doc">custom_kernels</span> - Writing custom ROCm kernels</p></li>
 <li><p><span class="xref std std-doc">quantization</span> - INT8 quantization for inference</p></li>

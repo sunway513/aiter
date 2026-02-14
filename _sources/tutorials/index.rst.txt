@@ -15,6 +15,7 @@ Learn AITER through hands-on examples.
    :maxdepth: 2
    :caption: Advanced Topics
 
+   add_new_op
    moe_tutorial
    custom_kernels
    quantization
@@ -41,6 +42,7 @@ Basic Tutorials
 Advanced Topics
 ^^^^^^^^^^^^^^^
 
+* :doc:`add_new_op` - **How to add a new operator** (step-by-step guide)
 * :doc:`moe_tutorial` - Mixture of Experts optimization
 * :doc:`custom_kernels` - Writing custom ROCm kernels
 * :doc:`quantization` - INT8 quantization for inference
