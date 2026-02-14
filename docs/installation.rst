@@ -30,7 +30,7 @@ Method 1: From PyPI (Recommended)
 
 .. code-block:: bash
 
-   pip install aiter
+   pip install amd-aiter
 
 Method 2: From Source
 ^^^^^^^^^^^^^^^^^^^^^
@@ -114,10 +114,16 @@ Verifying Installation
 .. code-block:: python
 
    import aiter
-   print(f"AITER version: {aiter.__version__}")
+   import torch
 
-   # Check available operators
-   print("Available operators:", dir(aiter))
+   # Check ROCm availability
+   print(f"PyTorch version: {torch.__version__}")
+   print(f"ROCm available: {torch.cuda.is_available()}")
+   print(f"ROCm version: {torch.version.hip if hasattr(torch.version, 'hip') else 'N/A'}")
+
+   # Verify AITER can import key operators
+   from aiter import flash_attn_with_kvcache, rmsnorm
+   print("AITER operators loaded successfully!")
 
 Optional: Triton Communication Support
 ---------------------------------------
