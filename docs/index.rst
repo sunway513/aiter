@@ -112,6 +112,14 @@ AITER supports AMD GPUs with the following architectures:
      - MI350X (upcoming)
      - ROCm 6.3+
 
+Quick Links
+-----------
+
+* 🚀 :doc:`quickstart` - Get started in 5 minutes
+* 📖 :doc:`tutorials/add_new_op` - **How to add a new operator** (step-by-step)
+* 🔧 :doc:`api/attention` - Flash Attention API
+* 💡 :doc:`tutorials/basic_usage` - Basic usage examples
+
 Table of Contents
 -----------------
 
