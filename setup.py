@@ -162,13 +162,12 @@ class NinjaBuildExtension(build_ext):
             return [], {}
 
         def _get_ck_dependent_modules(config_data):
-            """Identify modules that depend on CK 3rdparty or ASM codegen."""
+            """Identify modules that depend on CK 3rdparty."""
             ck_patterns = [
                 "CK_DIR",
                 "py_itfs_ck",
                 "gen_instances",
                 "generate.py",
-                "codegen.py",
             ]
             ck_modules = set()
             for mod_name, mod_cfg in config_data.items():

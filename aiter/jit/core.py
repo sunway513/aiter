@@ -695,7 +695,7 @@ def build_module(
                     ),
                 )
             )
-            raise SystemExit(
+            raise RuntimeError(
                 f"[aiter] build [{md_name}] under {opbd_dir} failed !!!!!!"
             ) from e
 
