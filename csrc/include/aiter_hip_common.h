@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2024-2026, Advanced Micro Devices, Inc. All rights reserved.
 #pragma once
+#ifdef AITER_CK_FREE
+#include "ck_tile_shim.h"
+#else
 #include "ck_tile/core.hpp"
+#endif
 #include <cstdint>
 #include <hip/hip_runtime.h>
 #include <iostream>

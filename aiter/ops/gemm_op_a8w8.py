@@ -606,6 +606,9 @@ def gemm_a8w8_blockscale_bpreshuffle_fake(
     return torch.empty(XQ.shape[0], WQ.shape[0], dtype=dtype, device=XQ.device)
 
 
+_ck_bpreshuffle_available = None  # None = untested, True/False = cached result
+
+
 @torch_compile_guard(gen_fake=gemm_a8w8_blockscale_bpreshuffle_fake)
 def gemm_a8w8_blockscale_bpreshuffle(
     XQ: Tensor,
@@ -614,6 +617,7 @@ def gemm_a8w8_blockscale_bpreshuffle(
     w_scale: Tensor,
     dtype: torch.dtype = dtypes.bf16,
 ) -> Tensor:
+    global _ck_bpreshuffle_available
     assert dtype in [
         dtypes.bf16,
         dtypes.fp16,
@@ -621,17 +625,31 @@ def gemm_a8w8_blockscale_bpreshuffle(
     m = XQ.shape[0]
     n = WQ.shape[0]
     k = XQ.shape[1]
-    config = get_CKGEMM_config(
-        m, n, k, AITER_CONFIGS.AITER_CONFIG_GEMM_A8W8_BLOCKSCALE_BPRESHUFFLE_FILE
-    )
     Y = torch.empty(m, n, dtype=dtype, device=XQ.device)
-    if config is not None:
-        libtype = config["libtype"]
-        if libtype == "cktile":
-            return gemm_a8w8_blockscale_cktile(XQ, WQ, x_scale, w_scale, Y, True)
-        elif libtype == "ck":
-            return gemm_a8w8_blockscale_bpreshuffle_ck(XQ, WQ, x_scale, w_scale, Y)
-    return gemm_a8w8_blockscale_bpreshuffle_ck(XQ, WQ, x_scale, w_scale, Y)
+
+    # Try CK path (tuned config or default)
+    if _ck_bpreshuffle_available is not False:
+        config = get_CKGEMM_config(
+            m, n, k, AITER_CONFIGS.AITER_CONFIG_GEMM_A8W8_BLOCKSCALE_BPRESHUFFLE_FILE
+        )
+        if config is not None:
+            libtype = config["libtype"]
+            if libtype == "cktile":
+                return gemm_a8w8_blockscale_cktile(XQ, WQ, x_scale, w_scale, Y, True)
+            elif libtype == "ck":
+                return gemm_a8w8_blockscale_bpreshuffle_ck(XQ, WQ, x_scale, w_scale, Y)
+        try:
+            result = gemm_a8w8_blockscale_bpreshuffle_ck(XQ, WQ, x_scale, w_scale, Y)
+            _ck_bpreshuffle_available = True
+            return result
+        except RuntimeError as e:
+            if "build" not in str(e).lower() and "module" not in str(e).lower():
+                raise  # re-raise genuine CK runtime errors
+            _ck_bpreshuffle_available = False
+            logger.warning("CK GEMM unavailable, falling back to ASM GEMM: %s", e)
+
+    # ASM fallback — note: out comes before scales in ASM signature
+    return gemm_a8w8_blockscale_bpreshuffle_asm(XQ, WQ, Y, x_scale, w_scale)
 
 
 def gfx950_a8w8_blockscale_ASM(

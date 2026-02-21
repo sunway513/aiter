@@ -162,13 +162,12 @@ class NinjaBuildExtension(build_ext):
             return [], {}
 
         def _get_ck_dependent_modules(config_data):
-            """Identify modules that depend on CK 3rdparty or ASM codegen."""
+            """Identify modules that depend on CK 3rdparty."""
             ck_patterns = [
                 "CK_DIR",
                 "py_itfs_ck",
                 "gen_instances",
                 "generate.py",
-                "codegen.py",
             ]
             ck_modules = set()
             for mod_name, mod_cfg in config_data.items():
@@ -177,13 +176,26 @@ class NinjaBuildExtension(build_ext):
                     ck_modules.add(mod_name)
             return ck_modules
 
+        def _get_v3_asm_modules(config_data):
+            """Identify V3-only ASM modules that can build without CK."""
+            v3_flags = ["FAV3_ON", "ONLY_FAV3"]
+            v3_modules = set()
+            for mod_name, mod_cfg in config_data.items():
+                flags_str = json.dumps(mod_cfg.get("flags_extra_cc", []))
+                if any(f in flags_str for f in v3_flags):
+                    v3_modules.add(mod_name)
+            return v3_modules
+
         def get_exclude_ops():
             all_modules, config_data = _load_modules_from_config()
             exclude_ops = []
 
-            # When CK is disabled, exclude all CK/ASM-dependent modules
+            # When CK is disabled, exclude CK-dependent modules
+            # but keep V3 ASM modules (they build with shim headers)
             if not ENABLE_CK:
                 ck_modules = _get_ck_dependent_modules(config_data)
+                v3_modules = _get_v3_asm_modules(config_data)
+                ck_modules -= v3_modules  # V3 can build with shim headers
                 exclude_ops.extend(sorted(ck_modules))
                 return exclude_ops
 

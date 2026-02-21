@@ -157,8 +157,9 @@ def get_GEMM_A16W16_config(
                 default_config["solidx"] = 2
                 default_config["kernelName"] = ""
         if not default_config:
-            default_config["libtype"] = "torch"
-            default_config["solidx"] = 0
+            default_config["libtype"] = "hipblaslt"
+            default_config["solidx"] = -1
+            default_config["kernelName"] = ""
         logger.info(
             f"using {default_config['libtype']} solution:{default_config['solidx']} for {M=} {N=} {K=} {dtype=} {otype=} {bias=}, {scaleAB=}, {bpreshuffle=}"
         )

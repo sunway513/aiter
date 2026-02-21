@@ -22,6 +22,7 @@ bool static isGPUArch(const std::vector<std::string> &archs)
     }
     return false;
 }
+#ifndef AITER_CK_FREE
 #ifdef __HIP_DEVICE_COMPILE__
 #if CK_TILE_USE_OCP_FP8
 const constexpr auto torch_fp8 = at::ScalarType::Float8_e4m3fn;
@@ -51,6 +52,21 @@ template <> struct t2ck<c10::BFloat16> { using type = ck_tile::bf16_t; };
 template <> struct t2ck<int32_t> { using type = ck_tile::index_t; };
 template <> struct t2ck<int8_t> { using type = ck_tile::int8_t; };
 // clang-format on
+#else
+// CK-free mode: only provide basic FP8/FP4 type detection
+inline at::ScalarType get_torch_fp8()
+{
+    static const auto value = isGPUArch({"gfx94"}) ? at::ScalarType::Float8_e4m3fnuz : at::ScalarType::Float8_e4m3fn;
+    return value;
+}
+#define torch_fp8 get_torch_fp8()
+
+#ifdef TORCH_Float4_e2m1fn_x2
+const constexpr auto torch_fp4x2 = torch::kFloat4_e2m1fn_x2;
+#else
+const constexpr auto torch_fp4x2  = torch::kUInt8;
+#endif
+#endif // AITER_CK_FREE
 
 // common utility functions
 #define FOREACH_BUFFER_TORCH_TYPE_MAP(F) \
