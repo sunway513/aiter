@@ -5,10 +5,16 @@
 // Include these 2 headers instead of torch/extension.h since we don't need all
 // of the torch headers.
 #include "aiter_hip_common.h"
+#ifdef AITER_CK_FREE
+#include "fmha_v3_compat.h"
+#else
 #include "fmha_fwd.hpp"
 #include "mask.hpp"
+#endif
 
 namespace aiter {
+
+#ifndef AITER_CK_FREE
 struct mha_fwd_traits : public fmha_fwd_traits
 {
     mha_fwd_traits(int head_size_q,
@@ -107,6 +113,7 @@ struct mha_fwd_splitkv_traits : public fmha_fwd_splitkv_traits
     {
     }
 };
+#endif // AITER_CK_FREE
 
 struct mha_fwd_args
 {
@@ -239,6 +246,7 @@ struct mha_fwd_args
     ck_tile::index_t block_scale_size_kv;
 };
 
+#ifndef AITER_CK_FREE
 using mha_fwd_splitkv_args   = fmha_fwd_splitkv_args;
 using mha_batch_prefill_args = fmha_batch_prefill_args;
 
@@ -262,6 +270,7 @@ mha_batch_prefill(mha_batch_prefill_args args,
                   bool has_lse,
                   quant_scale_enum qscale_type,
                   bool use_ext_asm);
+#endif // AITER_CK_FREE
 
 struct __attribute__((packed)) fmha_fwd_v3_args
 {

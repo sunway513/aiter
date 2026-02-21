@@ -642,9 +642,11 @@ def gemm_a8w8_blockscale_bpreshuffle(
             result = gemm_a8w8_blockscale_bpreshuffle_ck(XQ, WQ, x_scale, w_scale, Y)
             _ck_bpreshuffle_available = True
             return result
-        except RuntimeError:
+        except RuntimeError as e:
+            if "build" not in str(e).lower() and "module" not in str(e).lower():
+                raise  # re-raise genuine CK runtime errors
             _ck_bpreshuffle_available = False
-            logger.warning("CK GEMM unavailable, falling back to ASM GEMM")
+            logger.warning("CK GEMM unavailable, falling back to ASM GEMM: %s", e)
 
     # ASM fallback — note: out comes before scales in ASM signature
     return gemm_a8w8_blockscale_bpreshuffle_asm(XQ, WQ, Y, x_scale, w_scale)
