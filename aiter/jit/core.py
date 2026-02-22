@@ -880,6 +880,7 @@ def compile_ops(
     fc_name: Optional[str] = None,
     gen_func: Optional[Callable[..., dict[str, Any]]] = None,
     gen_fake: Optional[Callable[..., Any]] = None,
+    fallback: Optional[Callable] = None,
 ):
     def decorator(func):
         func.arg_checked = False
@@ -928,20 +929,34 @@ def compile_ops(
                     prev_hip_clang_path = os.environ.get("HIP_CLANG_PATH", None)
                     os.environ["HIP_CLANG_PATH"] = hip_clang_path
 
-                build_module(
-                    md_name,
-                    srcs,
-                    flags_extra_cc,
-                    flags_extra_hip,
-                    blob_gen_cmd,
-                    extra_include,
-                    extra_ldflags,
-                    verbose,
-                    is_python_module,
-                    is_standalone,
-                    torch_exclude,
-                    hipify,
-                )
+                try:
+                    build_module(
+                        md_name,
+                        srcs,
+                        flags_extra_cc,
+                        flags_extra_hip,
+                        blob_gen_cmd,
+                        extra_include,
+                        extra_ldflags,
+                        verbose,
+                        is_python_module,
+                        is_standalone,
+                        torch_exclude,
+                        hipify,
+                    )
+                except (RuntimeError, SystemError) as build_err:
+                    if hip_clang_path is not None:
+                        if prev_hip_clang_path is not None:
+                            os.environ["HIP_CLANG_PATH"] = prev_hip_clang_path
+                        else:
+                            os.environ.pop("HIP_CLANG_PATH", None)
+                    if fallback is not None:
+                        logger.warning(
+                            f"[aiter] JIT build [{md_name}] failed, "
+                            f"using fallback for {loadName}: {build_err}"
+                        )
+                        return fallback(*args, **kwargs)
+                    raise
 
                 if hip_clang_path is not None:
                     if prev_hip_clang_path is not None:
