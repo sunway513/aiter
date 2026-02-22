@@ -289,10 +289,10 @@ class NinjaBuildExtension(build_ext):
                         torch_exclude=False,
                     )
 
-                # Scale thread pool to CPU count: each small module uses ~4 cores
-                # on average, so cpu_count // 4 is a good upper bound.
+                # Launch all independent modules in parallel — ninja handles
+                # per-module CPU allocation via MAX_JOBS internally.
                 num_modules = len(all_opts_args_build)
-                prebuid_thread_num = min(num_modules, max(5, os.cpu_count() // 4))
+                prebuid_thread_num = num_modules
                 os.environ["PREBUILD_THREAD_NUM"] = str(prebuid_thread_num)
 
                 with ThreadPoolExecutor(max_workers=prebuid_thread_num) as executor:
