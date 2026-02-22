@@ -161,66 +161,14 @@ class NinjaBuildExtension(build_ext):
                 return list(data.keys()), data
             return [], {}
 
-        def _get_ck_dependent_modules(config_data):
-            """Identify modules that depend on CK 3rdparty."""
-            ck_patterns = [
-                "CK_DIR",
-                "py_itfs_ck",
-                "gen_instances",
-                "generate.py",
-            ]
-            ck_modules = set()
-            for mod_name, mod_cfg in config_data.items():
-                mod_str = json.dumps(mod_cfg)
-                if any(p in mod_str for p in ck_patterns):
-                    ck_modules.add(mod_name)
-            return ck_modules
-
-        def _get_v3_asm_modules(config_data):
-            """Identify V3-only ASM modules that can build without CK."""
-            v3_flags = ["FAV3_ON", "ONLY_FAV3"]
-            v3_modules = set()
-            for mod_name, mod_cfg in config_data.items():
-                flags_str = json.dumps(mod_cfg.get("flags_extra_cc", []))
-                if any(f in flags_str for f in v3_flags):
-                    v3_modules.add(mod_name)
-            return v3_modules
-
         def get_exclude_ops():
             all_modules, config_data = _load_modules_from_config()
             exclude_ops = []
 
-            # When CK is disabled, exclude CK-dependent modules
-            # but keep V3 ASM modules (they build with shim headers)
+            # When CK is disabled, use the shared exclusion logic from core.py
+            # (same logic is auto-applied in get_args_of_build for JIT prebuild)
             if not ENABLE_CK:
-                ck_modules = _get_ck_dependent_modules(config_data)
-                v3_modules = _get_v3_asm_modules(config_data)
-                ck_modules -= v3_modules  # V3 can build with shim headers
-                # Modules with deep CK source-level deps (ck_tile:: types
-                # used in .cu kernels) not caught by config pattern matching
-                ck_modules |= {
-                    "module_activation",
-                    "module_cache",
-                    "module_custom_all_reduce",
-                    "module_fused_qk_norm_mrope_cache_quant_shuffle",
-                    "module_fused_qk_norm_rope_cache_quant_shuffle",
-                    "module_mla_metadata",
-                    "module_mla_reduce",
-                    "module_moe_asm",
-                    "module_pa",
-                    "module_pa_metadata",
-                    "module_pa_ragged",
-                    "module_pa_v1",
-                    "module_ps_metadata",
-                    "module_quant",
-                    "module_rmsnorm_quant",
-                    "module_rope_general_bwd",
-                    "module_rope_general_fwd",
-                    "module_rope_pos_fwd",
-                    "module_sample",
-                    "module_topk_plain",
-                }
-                exclude_ops.extend(sorted(ck_modules))
+                exclude_ops.extend(sorted(core._get_ck_exclude_modules()))
                 return exclude_ops
 
             for module in all_modules:
