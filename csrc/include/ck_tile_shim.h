@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <functional>
 #include <tuple>
+#include <variant>
 #include <hip/hip_runtime.h>
 
 namespace ck_tile {
