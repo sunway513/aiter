@@ -73,6 +73,7 @@ using fp16_t = _Float16;
 using bf16_t = hip_bfloat16;
 using half_t      = fp16_t;
 using bfloat16_t  = bf16_t;
+using int8_t = ::int8_t;
 
 // Minimal fp8 type (E4M3 FNUZ by default, matches CK's fp8_t = float8_e4m3_t)
 struct alignas(1) fp8_t
@@ -105,8 +106,17 @@ using int16x2_t = int16_t __attribute__((ext_vector_type(2)));
 using int8x2_t  = int8_t __attribute__((ext_vector_type(2)));
 
 // ext_vector_t alias (used by topk_softmax_kernels_group.cu)
+// Struct types (hip_bfloat16, fp8_t) need mapping to LLVM primitive types
+namespace impl {
 template <typename T, int N>
-using ext_vector_t = T __attribute__((ext_vector_type(N)));
+struct ext_vector { using type = T __attribute__((ext_vector_type(N))); };
+template <int N>
+struct ext_vector<hip_bfloat16, N> { using type = __bf16 __attribute__((ext_vector_type(N))); };
+template <int N>
+struct ext_vector<fp8_t, N> { using type = uint8_t __attribute__((ext_vector_type(N))); };
+} // namespace impl
+template <typename T, int N>
+using ext_vector_t = typename impl::ext_vector<T, N>::type;
 
 // ---------------------------------------------------------------------------
 // bit_cast / type_convert

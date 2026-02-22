@@ -16,7 +16,11 @@
  * limitations under the License.
  */
 #ifdef USE_ROCM
+#ifdef AITER_CK_FREE
+#include "ck_tile_shim.h"
+#else
 #include "ck_tile/core.hpp"
+#endif
 #include <hip/hip_runtime.h>
 #endif
 
