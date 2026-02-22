@@ -572,7 +572,6 @@ def build_module(
             "-Wno-undefined-func-template",
             "-Wno-macro-redefined",
             "-Wno-missing-template-arg-list-after-template-kw",
-            "-Wno-invalid-constexpr",
             "-fgpu-flush-denormals-to-zero",
             f"-DDLLVM_MAIN_REVISION={check_LLVM_MAIN_REVISION()}",
         ]
@@ -637,15 +636,14 @@ def build_module(
         elif os.path.isdir(CK_HELPER_DIR):
             extra_include_paths.append(CK_HELPER_DIR)
 
-        # When CK is not available, enable lightweight shim headers
-        # so that modules with ck_tile:: dependencies can still compile
-        _is_ckfree = False
-        if not os.path.isdir(CK_3RDPARTY_DIR):
+        # When CK is not available, define AITER_CK_FREE for all modules
+        # so headers use lightweight shims instead of ck_tile/core.hpp
+        _is_ckfree = not os.path.isdir(CK_3RDPARTY_DIR)
+        if _is_ckfree:
             extra_include_paths = [
                 p for p in extra_include_paths if os.path.isdir(str(p))
             ]
             flags_cc.append("-DAITER_CK_FREE=1")
-            _is_ckfree = True
         if not hipify:
             _extra_inc = extra_include
             if _is_ckfree:
@@ -721,6 +719,66 @@ def build_module(
     mp_lock(lockPath=lock_path, MainFunc=MainFunc, FinalFunc=FinalFunc)
 
 
+def _get_ck_exclude_modules():
+    """Return set of module names that require CK and should be excluded in CK-free builds.
+
+    Combines two detection methods:
+    1. Config pattern matching — modules whose optCompilerConfig.json entry references
+       CK_DIR, py_itfs_ck, gen_instances, or generate.py
+    2. Hardcoded list — modules with deep ck_tile:: source-level dependencies that
+       aren't caught by config pattern matching
+
+    V3 ASM modules are exempted because they build with shim headers only.
+    """
+    cfg_path = os.path.join(this_dir, "optCompilerConfig.json")
+    try:
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            config_data = json.load(f)
+    except Exception:
+        config_data = {}
+
+    # Pattern-matched CK modules
+    ck_patterns = ["CK_DIR", "py_itfs_ck", "gen_instances", "generate.py"]
+    ck_modules = set()
+    for mod_name, mod_cfg in config_data.items():
+        mod_str = json.dumps(mod_cfg)
+        if any(p in mod_str for p in ck_patterns):
+            ck_modules.add(mod_name)
+
+    # V3 ASM modules can build with shim headers — exempt them
+    v3_flags = ["FAV3_ON", "ONLY_FAV3"]
+    for mod_name, mod_cfg in config_data.items():
+        flags_str = json.dumps(mod_cfg.get("flags_extra_cc", []))
+        if any(f in flags_str for f in v3_flags):
+            ck_modules.discard(mod_name)
+
+    # Modules with deep ck_tile:: source-level deps not caught by config patterns
+    ck_modules |= {
+        "module_activation",
+        "module_cache",
+        "module_custom_all_reduce",
+        "module_fused_qk_norm_mrope_cache_quant_shuffle",
+        "module_fused_qk_norm_rope_cache_quant_shuffle",
+        "module_mla_metadata",
+        "module_mla_reduce",
+        "module_moe_asm",
+        "module_pa",
+        "module_pa_metadata",
+        "module_pa_ragged",
+        "module_pa_v1",
+        "module_ps_metadata",
+        "module_quant",
+        "module_rmsnorm_quant",
+        "module_rope_general_bwd",
+        "module_rope_general_fwd",
+        "module_rope_pos_fwd",
+        "module_sample",
+        "module_topk_plain",
+    }
+
+    return ck_modules
+
+
 def get_args_of_build(ops_name: str, exclude=[]):
     d_opt_build_args = {
         "srcs": [],
@@ -760,6 +818,13 @@ def get_args_of_build(ops_name: str, exclude=[]):
         if isinstance(data, dict):
             # parse all ops, return list
             if ops_name == "all":
+                # Auto-exclude CK-dependent modules in CK-free builds
+                if not os.path.isdir(CK_3RDPARTY_DIR):
+                    ck_excludes = _get_ck_exclude_modules()
+                    exclude = list(set(exclude) | ck_excludes)
+                    logger.info(
+                        f"[CK-free] Auto-excluding {len(ck_excludes)} CK-dependent modules"
+                    )
                 all_ops_list = []
                 d_all_ops = {
                     "flags_extra_cc": [],

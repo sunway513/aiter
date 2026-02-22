@@ -161,42 +161,14 @@ class NinjaBuildExtension(build_ext):
                 return list(data.keys()), data
             return [], {}
 
-        def _get_ck_dependent_modules(config_data):
-            """Identify modules that depend on CK 3rdparty."""
-            ck_patterns = [
-                "CK_DIR",
-                "py_itfs_ck",
-                "gen_instances",
-                "generate.py",
-            ]
-            ck_modules = set()
-            for mod_name, mod_cfg in config_data.items():
-                mod_str = json.dumps(mod_cfg)
-                if any(p in mod_str for p in ck_patterns):
-                    ck_modules.add(mod_name)
-            return ck_modules
-
-        def _get_v3_asm_modules(config_data):
-            """Identify V3-only ASM modules that can build without CK."""
-            v3_flags = ["FAV3_ON", "ONLY_FAV3"]
-            v3_modules = set()
-            for mod_name, mod_cfg in config_data.items():
-                flags_str = json.dumps(mod_cfg.get("flags_extra_cc", []))
-                if any(f in flags_str for f in v3_flags):
-                    v3_modules.add(mod_name)
-            return v3_modules
-
         def get_exclude_ops():
             all_modules, config_data = _load_modules_from_config()
             exclude_ops = []
 
-            # When CK is disabled, exclude CK-dependent modules
-            # but keep V3 ASM modules (they build with shim headers)
+            # When CK is disabled, use the shared exclusion logic from core.py
+            # (same logic is auto-applied in get_args_of_build for JIT prebuild)
             if not ENABLE_CK:
-                ck_modules = _get_ck_dependent_modules(config_data)
-                v3_modules = _get_v3_asm_modules(config_data)
-                ck_modules -= v3_modules  # V3 can build with shim headers
-                exclude_ops.extend(sorted(ck_modules))
+                exclude_ops.extend(sorted(core._get_ck_exclude_modules()))
                 return exclude_ops
 
             for module in all_modules:
@@ -317,12 +289,10 @@ class NinjaBuildExtension(build_ext):
                         torch_exclude=False,
                     )
 
-                prebuid_thread_num = 5
-                max_jobs = os.environ.get("MAX_JOBS")
-                if max_jobs is not None and max_jobs.isdigit() and int(max_jobs) > 0:
-                    prebuid_thread_num = min(prebuid_thread_num, int(max_jobs))
-                else:
-                    prebuid_thread_num = min(prebuid_thread_num, getMaxJobs())
+                # Launch all independent modules in parallel — ninja handles
+                # per-module CPU allocation via MAX_JOBS internally.
+                num_modules = len(all_opts_args_build)
+                prebuid_thread_num = num_modules
                 os.environ["PREBUILD_THREAD_NUM"] = str(prebuid_thread_num)
 
                 with ThreadPoolExecutor(max_workers=prebuid_thread_num) as executor:

@@ -16,9 +16,7 @@
  * limitations under the License.
  */
 #ifdef USE_ROCM
-#ifdef AITER_CK_FREE
-#include "ck_tile_shim.h"
-#else
+#ifndef AITER_CK_FREE
 #include "ck_tile/core.hpp"
 #endif
 #include <hip/hip_runtime.h>
@@ -26,6 +24,8 @@
 
 #ifndef USE_ROCM
 constexpr int WARP_SIZE = 32;
+#elif defined(AITER_CK_FREE)
+constexpr int WARP_SIZE = 64;
 #else
 constexpr int WARP_SIZE = ck_tile::get_warp_size();
 #endif
