@@ -289,12 +289,10 @@ class NinjaBuildExtension(build_ext):
                         torch_exclude=False,
                     )
 
-                prebuid_thread_num = 5
-                max_jobs = os.environ.get("MAX_JOBS")
-                if max_jobs is not None and max_jobs.isdigit() and int(max_jobs) > 0:
-                    prebuid_thread_num = min(prebuid_thread_num, int(max_jobs))
-                else:
-                    prebuid_thread_num = min(prebuid_thread_num, getMaxJobs())
+                # Scale thread pool to CPU count: each small module uses ~4 cores
+                # on average, so cpu_count // 4 is a good upper bound.
+                num_modules = len(all_opts_args_build)
+                prebuid_thread_num = min(num_modules, max(5, os.cpu_count() // 4))
                 os.environ["PREBUILD_THREAD_NUM"] = str(prebuid_thread_num)
 
                 with ThreadPoolExecutor(max_workers=prebuid_thread_num) as executor:
