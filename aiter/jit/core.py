@@ -488,6 +488,7 @@ def check_numa():
 
 
 __mds = {}
+_failed_modules = {}  # md_name -> build error, skip rebuild on repeated calls
 
 
 @torch_compile_guard()
@@ -892,6 +893,12 @@ def compile_ops(
             md_name = _md_name
             if fc_name is None:
                 loadName = func.__name__
+
+            # Fast path: if this module already failed to build, go straight
+            # to fallback without re-attempting the (slow) JIT compilation.
+            if md_name in _failed_modules and fallback is not None:
+                return fallback(*args, **kwargs)
+
             try:
                 module = None
                 if gen_func is not None:
@@ -951,6 +958,7 @@ def compile_ops(
                         else:
                             os.environ.pop("HIP_CLANG_PATH", None)
                     if fallback is not None:
+                        _failed_modules[md_name] = build_err
                         logger.warning(
                             f"[aiter] JIT build [{md_name}] failed, "
                             f"using fallback for {loadName}: {build_err}"
