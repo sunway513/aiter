@@ -6,6 +6,12 @@
 #include <memory>
 #include <string>
 
+#ifdef AITER_CK_FREE
+#define FMHA_NS aiter
+#else
+#define FMHA_NS ck_tile
+#endif
+
 namespace aiter {
 #if FAV3_ON
 
@@ -181,7 +187,7 @@ std::tuple<int, int, int> get_grid_dim(const mha_fwd_args& a, int ts_qo, const s
     return std::make_tuple(gdx, gdy, gdz);
 }
 
-float fmha_fwd_v3(mha_fwd_args a, const ck_tile::stream_config& s)
+float fmha_fwd_v3(mha_fwd_args a, const FMHA_NS::stream_config& s)
 {
     std::string arch_id = get_gpu_arch();
 
@@ -236,7 +242,7 @@ float fmha_fwd_v3(mha_fwd_args a, const ck_tile::stream_config& s)
     int bdx              = (a.hdim_q == 192 && a.hdim_v == 128) ? 256 : 512;
     auto [gdx, gdy, gdz] = get_grid_dim(a, cfg.ts_qo, arch_id);
 
-    return ck_tile::launch_kernel(s, [=](const ck_tile::stream_config& s_) mutable {
+    return FMHA_NS::launch_kernel(s, [=](const FMHA_NS::stream_config& s_) mutable {
         // Explicit assignment forces evaluation order and prevents compiler from
         // reordering operations that could lead to accessing uninitialized args
         void* args_ptr     = &args;
@@ -247,7 +253,7 @@ float fmha_fwd_v3(mha_fwd_args a, const ck_tile::stream_config& s)
 #endif
 
 #if FAV2_ON
-float fmha_fwd_ck(mha_fwd_args a, const ck_tile::stream_config& s)
+float fmha_fwd_ck(mha_fwd_args a, const FMHA_NS::stream_config& s)
 {
     fmha_fwd_traits traits{a.hdim_q,
                            a.hdim_v,
@@ -333,7 +339,7 @@ float fmha_fwd_ck(mha_fwd_args a, const ck_tile::stream_config& s)
 }
 #endif
 
-float mha_fwd(mha_fwd_args args, const ck_tile::stream_config& s)
+float mha_fwd(mha_fwd_args args, const FMHA_NS::stream_config& s)
 {
     float ret = -1;
 

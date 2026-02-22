@@ -25,7 +25,11 @@
 #ifndef USE_ROCM
 constexpr int WARP_SIZE = 32;
 #elif defined(AITER_CK_FREE)
+#ifdef __AMDGCN_WAVEFRONT_SIZE__
+constexpr int WARP_SIZE = __AMDGCN_WAVEFRONT_SIZE__;
+#else
 constexpr int WARP_SIZE = 64;
+#endif
 #else
 constexpr int WARP_SIZE = ck_tile::get_warp_size();
 #endif

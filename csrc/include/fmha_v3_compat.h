@@ -14,7 +14,7 @@
 #include <stdexcept>
 #include <algorithm>
 
-// ck_tile_shim.h is already included via aiter_hip_common.h before this header
+// aiter_fmha_host.h is already included via aiter_hip_common.h before this header
 
 // ===========================================================================
 // mask_enum + mask_info  (from CK example/ck_tile/01_fmha/mask.hpp)
@@ -32,11 +32,11 @@ enum class mask_enum
 struct mask_info
 {
     mask_enum type;
-    ck_tile::index_t seqlen_q;
-    ck_tile::index_t seqlen_k;
-    ck_tile::index_t y, x;
-    ck_tile::index_t left, right; // FA style SWA left/right
-    ck_tile::index_t sink;
+    int32_t seqlen_q;
+    int32_t seqlen_k;
+    int32_t y, x;
+    int32_t left, right; // FA style SWA left/right
+    int32_t sink;
 
     void serialize(std::ostream& os) const
     {
@@ -52,10 +52,10 @@ struct mask_info
         }
     }
 
-    static mask_info decode(std::string str, ck_tile::index_t seqlen_q, ck_tile::index_t seqlen_k)
+    static mask_info decode(std::string str, int32_t seqlen_q, int32_t seqlen_k)
     {
-        ck_tile::index_t x_total = seqlen_k;
-        ck_tile::index_t y_total = seqlen_q;
+        int32_t x_total = seqlen_k;
+        int32_t y_total = seqlen_q;
         mask_info tmp;
         tmp.seqlen_q = seqlen_q;
         tmp.seqlen_k = seqlen_k;
@@ -67,21 +67,21 @@ struct mask_info
             if(t == "xt" || t == "xb")
             {
                 // xformer style sliding window attn from top-left
-                ck_tile::index_t window_size = std::stoi(v);
-                ck_tile::index_t left_size   = -1;
-                ck_tile::index_t right_size  = 0;
-                ck_tile::index_t sink_size   = 0;
+                int32_t window_size = std::stoi(v);
+                int32_t left_size   = -1;
+                int32_t right_size  = 0;
+                int32_t sink_size   = 0;
                 if(window_size > 0)
                 {
                     left_size  = window_size / 2;
                     right_size = window_size - 1 - left_size;
                 }
-                auto r = ck_tile::make_generic_attention_mask_coordinates_from_lr_window(
+                auto r = aiter::make_generic_attention_mask_coordinates_from_lr_window(
                     left_size, right_size, sink_size, y_total, x_total, t == "xt");
 
                 tmp.type  = t == "xt" ? mask_enum::mask_top_left : mask_enum::mask_bottom_right;
-                tmp.y     = r.at(ck_tile::number<0>{});
-                tmp.x     = r.at(ck_tile::number<1>{});
+                tmp.y     = r.at(aiter::number<0>{});
+                tmp.x     = r.at(aiter::number<1>{});
                 tmp.left  = left_size;
                 tmp.right = right_size;
             }
@@ -93,10 +93,10 @@ struct mask_info
                     throw std::invalid_argument("invalid mask value: " + str);
                 }
                 tmp.type              = mask_enum::window_generic;
-                ck_tile::index_t v0   = atoi(v.substr(0, found_1).c_str());
+                int32_t v0   = atoi(v.substr(0, found_1).c_str());
                 auto found_2          = v.find(',', found_1 + 1);
-                ck_tile::index_t v1   = 0;
-                ck_tile::index_t sink = 0;
+                int32_t v1   = 0;
+                int32_t sink = 0;
                 if(t == "t")
                 {
                     if(found_2 != std::string::npos)
@@ -110,10 +110,10 @@ struct mask_info
                         sink = 0;
                     }
                     tmp.type = mask_enum::mask_top_left;
-                    auto r   = ck_tile::make_generic_attention_mask_coordinates_from_lr_window(
+                    auto r   = aiter::make_generic_attention_mask_coordinates_from_lr_window(
                         v0, v1, sink, y_total, x_total, true);
-                    tmp.y     = r.at(ck_tile::number<0>{});
-                    tmp.x     = r.at(ck_tile::number<1>{});
+                    tmp.y     = r.at(aiter::number<0>{});
+                    tmp.x     = r.at(aiter::number<1>{});
                     tmp.left  = v0;
                     tmp.right = v1;
                     tmp.sink  = sink;
@@ -131,10 +131,10 @@ struct mask_info
                         sink = 0;
                     }
                     tmp.type = mask_enum::mask_bottom_right;
-                    auto r   = ck_tile::make_generic_attention_mask_coordinates_from_lr_window(
+                    auto r   = aiter::make_generic_attention_mask_coordinates_from_lr_window(
                         v0, v1, sink, y_total, x_total, false);
-                    tmp.y     = r.at(ck_tile::number<0>{});
-                    tmp.x     = r.at(ck_tile::number<1>{});
+                    tmp.y     = r.at(aiter::number<0>{});
+                    tmp.x     = r.at(aiter::number<1>{});
                     tmp.left  = v0;
                     tmp.right = v1;
                     tmp.sink  = sink;
@@ -183,15 +183,15 @@ struct mask_info
         return tmp;
     }
 
-    ck_tile::index_t get_unmaskarea() const
+    int32_t get_unmaskarea() const
     {
         if(type == mask_enum::no_mask)
             return seqlen_q * seqlen_k;
-        ck_tile::index_t area = 0;
-        for(ck_tile::index_t i_y = 0; i_y < seqlen_q; ++i_y)
+        int32_t area = 0;
+        for(int32_t i_y = 0; i_y < seqlen_q; ++i_y)
         {
-            ck_tile::index_t x_start = std::max(-y + i_y + 1, static_cast<ck_tile::index_t>(0));
-            ck_tile::index_t x_end   = std::min(i_y + x, seqlen_k);
+            int32_t x_start = std::max(-y + i_y + 1, static_cast<int32_t>(0));
+            int32_t x_end   = std::min(i_y + x, seqlen_k);
             if(x_end > x_start)
             {
                 area += (x_end - x_start);

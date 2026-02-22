@@ -157,7 +157,7 @@ std::vector<at::Tensor> fmha_v3_bwd(const at::Tensor &dout,         // [b, sq, h
     auto gen = at::get_generator_or_default<at::CUDAGeneratorImpl>(
     gen_, at::cuda::detail::getDefaultCUDAGenerator());
 
-    int64_t counter_offset = batch_size * num_heads * ck_tile::get_warp_size();
+    int64_t counter_offset = batch_size * num_heads * aiter::get_warp_size();
     at::Tensor rng_state;
 
     if (rng_state_.has_value()) {
@@ -175,67 +175,67 @@ std::vector<at::Tensor> fmha_v3_bwd(const at::Tensor &dout,         // [b, sq, h
     if (seqlen_q > 0) {
         auto rng_state_ptr = reinterpret_cast<uint64_t*>(rng_state.data_ptr());
         auto drop_seed_offset = std::make_pair(rng_state_ptr, rng_state_ptr + 1);
-        ck_tile::stream_config stream_config{stream};
+        aiter::stream_config stream_config{stream};
 
         auto args = [=]() {
             // q: (batch_size, seqlen_q, nheads, hdim_q)
-            ck_tile::index_t batch_stride_q = q.stride(0);
-            ck_tile::index_t stride_q = q.stride(1);
-            ck_tile::index_t nhead_stride_q = q.stride(2);
+            int32_t batch_stride_q = q.stride(0);
+            int32_t stride_q = q.stride(1);
+            int32_t nhead_stride_q = q.stride(2);
 
             // k: (batch_size, seqlen_k, nheads_k, hdim_q)
-            ck_tile::index_t batch_stride_k = k.stride(0);
-            ck_tile::index_t stride_k = k.stride(1);
-            ck_tile::index_t nhead_stride_k = k.stride(2);
+            int32_t batch_stride_k = k.stride(0);
+            int32_t stride_k = k.stride(1);
+            int32_t nhead_stride_k = k.stride(2);
 
             // v: (batch_size, seqlen_k, nheads_k, hdim_v)
-            ck_tile::index_t batch_stride_v = v.stride(0);
-            ck_tile::index_t stride_v = v.stride(1);
-            ck_tile::index_t nhead_stride_v = v.stride(2);
+            int32_t batch_stride_v = v.stride(0);
+            int32_t stride_v = v.stride(1);
+            int32_t nhead_stride_v = v.stride(2);
 
             // o: (batch_size, seqlen_q, nheads, hdim_v)
-            ck_tile::index_t batch_stride_o = out.stride(0);
-            ck_tile::index_t stride_o = out.stride(1);
-            ck_tile::index_t nhead_stride_o = out.stride(2);
+            int32_t batch_stride_o = out.stride(0);
+            int32_t stride_o = out.stride(1);
+            int32_t nhead_stride_o = out.stride(2);
 
             // lse: (batch_size, nheads, seqlen_q)
-            ck_tile::index_t batch_stride_lse = softmax_lse.stride(0);
-            ck_tile::index_t nhead_stride_lse = softmax_lse.stride(1);
+            int32_t batch_stride_lse = softmax_lse.stride(0);
+            int32_t nhead_stride_lse = softmax_lse.stride(1);
 
             // do: (batch_size, seqlen_q, nheads, hdim_v)
-            ck_tile::index_t batch_stride_do = dout.stride(0);
-            ck_tile::index_t stride_do = dout.stride(1);
-            ck_tile::index_t nhead_stride_do = dout.stride(2);
+            int32_t batch_stride_do = dout.stride(0);
+            int32_t stride_do = dout.stride(1);
+            int32_t nhead_stride_do = dout.stride(2);
 
             // d: (batch_size, nheads, seqlen_q)
             // CK assume d share the same stride with lse
 
             // dq: (batch_size, seqlen_q, nheads, hdim_q)
-            ck_tile::index_t batch_stride_dq = dq.stride(0);
-            ck_tile::index_t stride_dq = dq.stride(1);
-            ck_tile::index_t nhead_stride_dq = dq.stride(2);
+            int32_t batch_stride_dq = dq.stride(0);
+            int32_t stride_dq = dq.stride(1);
+            int32_t nhead_stride_dq = dq.stride(2);
 
             // dk_expanded: (batch_size, seqlen_k, nheads, hdim_q)
-            ck_tile::index_t batch_stride_dk = dk_expanded.stride(0);
-            ck_tile::index_t stride_dk = dk_expanded.stride(1);
-            ck_tile::index_t nhead_stride_dk = dk_expanded.stride(2);
+            int32_t batch_stride_dk = dk_expanded.stride(0);
+            int32_t stride_dk = dk_expanded.stride(1);
+            int32_t nhead_stride_dk = dk_expanded.stride(2);
 
             // dv_expanded: (batch_size, seqlen_k, nheads, hdim_v)
-            ck_tile::index_t batch_stride_dv = dv_expanded.stride(0);
-            ck_tile::index_t stride_dv = dv_expanded.stride(1);
-            ck_tile::index_t nhead_stride_dv = dv_expanded.stride(2);
+            int32_t batch_stride_dv = dv_expanded.stride(0);
+            int32_t stride_dv = dv_expanded.stride(1);
+            int32_t nhead_stride_dv = dv_expanded.stride(2);
 
             // TODO: if dq_acc layout do no harm to performance consider reuse this api
             // dq_acc: (split, batch_size, nheads, seqlen_q, hdim_q)
-            ck_tile::index_t split_stride_dq_acc = dq_accum.stride(0);
-            ck_tile::long_index_t batch_stride_dq_acc = dq_accum.stride(1);
-            ck_tile::long_index_t nhead_stride_dq_acc = dq_accum.stride(2);
-            ck_tile::index_t stride_dq_acc = dq_accum.stride(3);
+            int32_t split_stride_dq_acc = dq_accum.stride(0);
+            int64_t batch_stride_dq_acc = dq_accum.stride(1);
+            int64_t nhead_stride_dq_acc = dq_accum.stride(2);
+            int32_t stride_dq_acc = dq_accum.stride(3);
 
             float p_undrop = 1.0 - p_dropout;
 
             void *alibi_slopes_ptr = nullptr;
-            ck_tile::index_t stride_alibi_slopes = 0;
+            int32_t stride_alibi_slopes = 0;
 
             if (alibi_slopes_.has_value()) {
                 auto alibi_slopes = alibi_slopes_.value();

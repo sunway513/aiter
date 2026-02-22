@@ -53,33 +53,33 @@ mha_fwd_args get_asm_mha_varlen_fwd_args(bool has_lse,
     // lse: (nheads, total_q)
     // randval: (nheads, total_q, max_seqlen_k)
 
-    ck_tile::index_t total_q = q.size(0);
-    ck_tile::index_t total_k = k.size(0);
+    int32_t total_q = q.size(0);
+    int32_t total_k = k.size(0);
 
-    ck_tile::index_t stride_q = q.stride(0);
-    ck_tile::index_t stride_k = k.stride(0);
-    ck_tile::index_t stride_v = v.stride(0);
-    ck_tile::index_t stride_o = out.stride(0);
-    ck_tile::index_t stride_randval = has_dropout_randval ? dropout_randval.stride(1) : 0;
+    int32_t stride_q = q.stride(0);
+    int32_t stride_k = k.stride(0);
+    int32_t stride_v = v.stride(0);
+    int32_t stride_o = out.stride(0);
+    int32_t stride_randval = has_dropout_randval ? dropout_randval.stride(1) : 0;
 
-    ck_tile::index_t nhead_stride_q = q.stride(1);
-    ck_tile::index_t nhead_stride_k = k.stride(1);
-    ck_tile::index_t nhead_stride_v = v.stride(1);
-    ck_tile::index_t nhead_stride_o = out.stride(1);
-    ck_tile::index_t nhead_stride_lse = has_lse ? softmax_lse.stride(0) : 0;
-    ck_tile::index_t nhead_stride_randval = has_dropout_randval ? dropout_randval.stride(0) : 0;
+    int32_t nhead_stride_q = q.stride(1);
+    int32_t nhead_stride_k = k.stride(1);
+    int32_t nhead_stride_v = v.stride(1);
+    int32_t nhead_stride_o = out.stride(1);
+    int32_t nhead_stride_lse = has_lse ? softmax_lse.stride(0) : 0;
+    int32_t nhead_stride_randval = has_dropout_randval ? dropout_randval.stride(0) : 0;
 
-    ck_tile::index_t batch_stride_q = 0;
-    ck_tile::index_t batch_stride_k = 0;
-    ck_tile::index_t batch_stride_v = 0;
-    ck_tile::index_t batch_stride_o = 0;
-    ck_tile::index_t batch_stride_lse = 0;
-    ck_tile::index_t batch_stride_randval = 0;
+    int32_t batch_stride_q = 0;
+    int32_t batch_stride_k = 0;
+    int32_t batch_stride_v = 0;
+    int32_t batch_stride_o = 0;
+    int32_t batch_stride_lse = 0;
+    int32_t batch_stride_randval = 0;
 
     void *bias_ptr = nullptr;
-    ck_tile::index_t stride_bias = 0;
-    ck_tile::index_t nhead_stride_bias = 0;
-    ck_tile::index_t batch_stride_bias = 0;
+    int32_t stride_bias = 0;
+    int32_t nhead_stride_bias = 0;
+    int32_t batch_stride_bias = 0;
 
     if (bias_.has_value()) {
         auto bias = bias_.value();
@@ -184,7 +184,7 @@ mha_fwd_args get_asm_mha_varlen_fwd_args(bool has_lse,
                         mask.left,
                         mask.right,
                         0,              // sink_size
-                        static_cast<ck_tile::index_t>(mask.type),
+                        static_cast<int32_t>(mask.type),
                         min_seqlen_q,
                         p_dropout,
                         has_dropout_randval,
@@ -367,7 +367,7 @@ fmha_v3_varlen_fwd(at::Tensor &q,                  // [total_q, hq, d]
     auto rng_state_ptr = reinterpret_cast<uint64_t*>(rng_state.data_ptr());
 
     if (p_dropout > 0.0)  {
-        int64_t counter_offset = batch_size * num_heads * ck_tile::get_warp_size();
+        int64_t counter_offset = batch_size * num_heads * aiter::get_warp_size();
         auto gen = at::get_generator_or_default<at::CUDAGeneratorImpl>(
             gen_, at::cuda::detail::getDefaultCUDAGenerator());
         // See Note [Acquire lock when using random generators]
@@ -380,7 +380,7 @@ fmha_v3_varlen_fwd(at::Tensor &q,                  // [total_q, hq, d]
 
     if (max_seqlen_k > 0) {
         auto stream = at::hip::getCurrentHIPStream();
-        ck_tile::stream_config stream_config{stream};
+        aiter::stream_config stream_config{stream};
 
         auto drop_seed_offset = std::make_pair(rng_state_ptr, rng_state_ptr + 1);
         auto args =

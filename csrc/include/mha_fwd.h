@@ -190,51 +190,51 @@ struct mha_fwd_args
     const void* block_scale_seqstart_k_ptr;
     const void* sink_ptr;
 
-    ck_tile::index_t seqlen_q;
-    ck_tile::index_t seqlen_k;
-    ck_tile::index_t batch;
-    ck_tile::index_t max_seqlen_q;
-    ck_tile::index_t hdim_q;
-    ck_tile::index_t hdim_v;
-    ck_tile::index_t nhead_q;
-    ck_tile::index_t nhead_k;
+    int32_t seqlen_q;
+    int32_t seqlen_k;
+    int32_t batch;
+    int32_t max_seqlen_q;
+    int32_t hdim_q;
+    int32_t hdim_v;
+    int32_t nhead_q;
+    int32_t nhead_k;
 
     float scale_s;
     float logits_soft_cap;
 
-    ck_tile::index_t stride_q;
-    ck_tile::index_t stride_k;
-    ck_tile::index_t stride_v;
-    ck_tile::index_t stride_bias; // if alibi, b*h need set this to h, 1*h need set this to 0
-    ck_tile::index_t stride_randval;
-    ck_tile::index_t stride_o;
-    ck_tile::index_t nhead_stride_q;
-    ck_tile::index_t nhead_stride_k;
-    ck_tile::index_t nhead_stride_v;
-    ck_tile::index_t nhead_stride_bias;
-    ck_tile::index_t nhead_stride_randval;
-    ck_tile::index_t nhead_stride_lse;
-    ck_tile::index_t nhead_stride_o;
-    ck_tile::index_t nhead_stride_q_descale;
-    ck_tile::index_t nhead_stride_k_descale;
-    ck_tile::index_t nhead_stride_v_descale;
-    ck_tile::index_t batch_stride_q;
-    ck_tile::index_t batch_stride_k;
-    ck_tile::index_t batch_stride_v;
-    ck_tile::index_t batch_stride_bias;
-    ck_tile::index_t batch_stride_randval;
-    ck_tile::index_t batch_stride_lse;
-    ck_tile::index_t batch_stride_o;
-    ck_tile::index_t batch_stride_q_descale;
-    ck_tile::index_t batch_stride_k_descale;
-    ck_tile::index_t batch_stride_v_descale;
+    int32_t stride_q;
+    int32_t stride_k;
+    int32_t stride_v;
+    int32_t stride_bias; // if alibi, b*h need set this to h, 1*h need set this to 0
+    int32_t stride_randval;
+    int32_t stride_o;
+    int32_t nhead_stride_q;
+    int32_t nhead_stride_k;
+    int32_t nhead_stride_v;
+    int32_t nhead_stride_bias;
+    int32_t nhead_stride_randval;
+    int32_t nhead_stride_lse;
+    int32_t nhead_stride_o;
+    int32_t nhead_stride_q_descale;
+    int32_t nhead_stride_k_descale;
+    int32_t nhead_stride_v_descale;
+    int32_t batch_stride_q;
+    int32_t batch_stride_k;
+    int32_t batch_stride_v;
+    int32_t batch_stride_bias;
+    int32_t batch_stride_randval;
+    int32_t batch_stride_lse;
+    int32_t batch_stride_o;
+    int32_t batch_stride_q_descale;
+    int32_t batch_stride_k_descale;
+    int32_t batch_stride_v_descale;
 
-    ck_tile::index_t window_size_left;
-    ck_tile::index_t window_size_right;
-    ck_tile::index_t sink_size;
-    ck_tile::index_t
+    int32_t window_size_left;
+    int32_t window_size_right;
+    int32_t sink_size;
+    int32_t
         mask_type; // 0: no mask   1: top_left_causal   2: bottom_right_causal   3: window_generic
-    ck_tile::index_t min_seqlen_q;
+    int32_t min_seqlen_q;
 
     float p_drop;
     bool s_randval;
@@ -242,8 +242,8 @@ struct mha_fwd_args
     std::variant<std::pair<uint64_t, uint64_t>, std::pair<const void*, const void*>>
         drop_seed_offset;
 
-    ck_tile::index_t block_scale_size_q;
-    ck_tile::index_t block_scale_size_kv;
+    int32_t block_scale_size_q;
+    int32_t block_scale_size_kv;
 };
 
 #ifndef AITER_CK_FREE
@@ -340,8 +340,15 @@ struct __attribute__((packed)) fmha_fwd_v3_args
     p2 _p31;
 };
 
+#ifdef AITER_CK_FREE
+__attribute__((visibility("default"))) float mha_fwd(mha_fwd_args args,
+                                                     const aiter::stream_config& s);
+
+float fmha_fwd_v3(mha_fwd_args a, const aiter::stream_config& s);
+#else
 __attribute__((visibility("default"))) float mha_fwd(mha_fwd_args args,
                                                      const ck_tile::stream_config& s);
 
 float fmha_fwd_v3(mha_fwd_args a, const ck_tile::stream_config& s);
+#endif
 } // namespace aiter
