@@ -196,6 +196,30 @@ class NinjaBuildExtension(build_ext):
                 ck_modules = _get_ck_dependent_modules(config_data)
                 v3_modules = _get_v3_asm_modules(config_data)
                 ck_modules -= v3_modules  # V3 can build with shim headers
+                # Modules with deep CK source-level deps (ck_tile:: types
+                # used in .cu kernels) not caught by config pattern matching
+                ck_modules |= {
+                    "module_activation",
+                    "module_cache",
+                    "module_custom_all_reduce",
+                    "module_fused_qk_norm_mrope_cache_quant_shuffle",
+                    "module_fused_qk_norm_rope_cache_quant_shuffle",
+                    "module_mla_metadata",
+                    "module_mla_reduce",
+                    "module_moe_asm",
+                    "module_pa",
+                    "module_pa_metadata",
+                    "module_pa_ragged",
+                    "module_pa_v1",
+                    "module_ps_metadata",
+                    "module_quant",
+                    "module_rmsnorm_quant",
+                    "module_rope_general_bwd",
+                    "module_rope_general_fwd",
+                    "module_rope_pos_fwd",
+                    "module_sample",
+                    "module_topk_plain",
+                }
                 exclude_ops.extend(sorted(ck_modules))
                 return exclude_ops
 

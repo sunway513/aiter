@@ -16,7 +16,9 @@
  * limitations under the License.
  */
 #include "aiter_hip_common.h"
+#ifndef AITER_CK_FREE
 #include "ck_tile/core.hpp"
+#endif
 #include "communication_asm.h"
 #include "hip_float8.h"
 #include <hip/hip_bf16.h>
