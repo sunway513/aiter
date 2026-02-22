@@ -8,6 +8,12 @@
 
 #include "mha_bwd.h"
 
+#ifdef AITER_CK_FREE
+#define FMHA_NS aiter
+#else
+#define FMHA_NS ck_tile
+#endif
+
 namespace aiter {
 namespace torch_itfs {
 std::vector<at::Tensor>
@@ -185,7 +191,7 @@ fmha_v3_varlen_bwd(const at::Tensor &dout,                  // [total_q, hq, d_v
     auto gen = at::get_generator_or_default<at::CUDAGeneratorImpl>(
         gen_, at::cuda::detail::getDefaultCUDAGenerator());
 
-    int64_t counter_offset = batch_size * num_heads * aiter::get_warp_size();
+    int64_t counter_offset = batch_size * num_heads * FMHA_NS::get_warp_size();
     at::Tensor rng_state;
 
     if (rng_state_.has_value()) {
@@ -205,7 +211,7 @@ fmha_v3_varlen_bwd(const at::Tensor &dout,                  // [total_q, hq, d_v
     if (max_seqlen_q > 0) {
         auto rng_state_ptr = reinterpret_cast<uint64_t*>(rng_state.data_ptr());
         auto drop_seed_offset = std::make_pair(rng_state_ptr, rng_state_ptr + 1);
-        aiter::stream_config stream_config{stream};
+        FMHA_NS::stream_config stream_config{stream};
 
         auto args = [=]() {
             // q: (total_q, nheads, hdim_q)

@@ -8,6 +8,12 @@
 
 #include "mha_fwd.h"
 
+#ifdef AITER_CK_FREE
+#define FMHA_NS aiter
+#else
+#define FMHA_NS ck_tile
+#endif
+
 namespace aiter {
 namespace torch_itfs {
 mha_fwd_args get_asm_mha_varlen_fwd_args(bool has_lse,
@@ -367,7 +373,7 @@ fmha_v3_varlen_fwd(at::Tensor &q,                  // [total_q, hq, d]
     auto rng_state_ptr = reinterpret_cast<uint64_t*>(rng_state.data_ptr());
 
     if (p_dropout > 0.0)  {
-        int64_t counter_offset = batch_size * num_heads * aiter::get_warp_size();
+        int64_t counter_offset = batch_size * num_heads * FMHA_NS::get_warp_size();
         auto gen = at::get_generator_or_default<at::CUDAGeneratorImpl>(
             gen_, at::cuda::detail::getDefaultCUDAGenerator());
         // See Note [Acquire lock when using random generators]
@@ -380,7 +386,7 @@ fmha_v3_varlen_fwd(at::Tensor &q,                  // [total_q, hq, d]
 
     if (max_seqlen_k > 0) {
         auto stream = at::hip::getCurrentHIPStream();
-        aiter::stream_config stream_config{stream};
+        FMHA_NS::stream_config stream_config{stream};
 
         auto drop_seed_offset = std::make_pair(rng_state_ptr, rng_state_ptr + 1);
         auto args =
