@@ -572,6 +572,7 @@ def build_module(
             "-Wno-undefined-func-template",
             "-Wno-macro-redefined",
             "-Wno-missing-template-arg-list-after-template-kw",
+            "-Wno-invalid-constexpr",
             "-fgpu-flush-denormals-to-zero",
             f"-DDLLVM_MAIN_REVISION={check_LLVM_MAIN_REVISION()}",
         ]
@@ -636,19 +637,18 @@ def build_module(
         elif os.path.isdir(CK_HELPER_DIR):
             extra_include_paths.append(CK_HELPER_DIR)
 
-        # When CK is not available, V3 ASM modules use shim headers
-        _is_v3_ckfree = False
+        # When CK is not available, enable lightweight shim headers
+        # so that modules with ck_tile:: dependencies can still compile
+        _is_ckfree = False
         if not os.path.isdir(CK_3RDPARTY_DIR):
-            v3_flags = ["FAV3_ON", "ONLY_FAV3"]
-            if any(f in " ".join(str(x) for x in flags_cc) for f in v3_flags):
-                extra_include_paths = [
-                    p for p in extra_include_paths if os.path.isdir(str(p))
-                ]
-                flags_cc.append("-DAITER_CK_FREE=1")
-                _is_v3_ckfree = True
+            extra_include_paths = [
+                p for p in extra_include_paths if os.path.isdir(str(p))
+            ]
+            flags_cc.append("-DAITER_CK_FREE=1")
+            _is_ckfree = True
         if not hipify:
             _extra_inc = extra_include
-            if _is_v3_ckfree:
+            if _is_ckfree:
                 _extra_inc = [p for p in extra_include if os.path.isdir(str(p))]
             extra_include_paths += [
                 f"{AITER_CSRC_DIR}/include",
