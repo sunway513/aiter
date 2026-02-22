@@ -488,6 +488,7 @@ def check_numa():
 
 
 __mds = {}
+_failed_modules = {}  # md_name -> build error, skip rebuild on repeated calls
 
 
 @torch_compile_guard()
@@ -880,6 +881,7 @@ def compile_ops(
     fc_name: Optional[str] = None,
     gen_func: Optional[Callable[..., dict[str, Any]]] = None,
     gen_fake: Optional[Callable[..., Any]] = None,
+    fallback: Optional[Callable] = None,
 ):
     def decorator(func):
         func.arg_checked = False
@@ -891,6 +893,12 @@ def compile_ops(
             md_name = _md_name
             if fc_name is None:
                 loadName = func.__name__
+
+            # Fast path: if this module already failed to build, go straight
+            # to fallback without re-attempting the (slow) JIT compilation.
+            if md_name in _failed_modules and fallback is not None:
+                return fallback(*args, **kwargs)
+
             try:
                 module = None
                 if gen_func is not None:
@@ -928,20 +936,35 @@ def compile_ops(
                     prev_hip_clang_path = os.environ.get("HIP_CLANG_PATH", None)
                     os.environ["HIP_CLANG_PATH"] = hip_clang_path
 
-                build_module(
-                    md_name,
-                    srcs,
-                    flags_extra_cc,
-                    flags_extra_hip,
-                    blob_gen_cmd,
-                    extra_include,
-                    extra_ldflags,
-                    verbose,
-                    is_python_module,
-                    is_standalone,
-                    torch_exclude,
-                    hipify,
-                )
+                try:
+                    build_module(
+                        md_name,
+                        srcs,
+                        flags_extra_cc,
+                        flags_extra_hip,
+                        blob_gen_cmd,
+                        extra_include,
+                        extra_ldflags,
+                        verbose,
+                        is_python_module,
+                        is_standalone,
+                        torch_exclude,
+                        hipify,
+                    )
+                except (RuntimeError, SystemError) as build_err:
+                    if hip_clang_path is not None:
+                        if prev_hip_clang_path is not None:
+                            os.environ["HIP_CLANG_PATH"] = prev_hip_clang_path
+                        else:
+                            os.environ.pop("HIP_CLANG_PATH", None)
+                    if fallback is not None:
+                        _failed_modules[md_name] = build_err
+                        logger.warning(
+                            f"[aiter] JIT build [{md_name}] failed, "
+                            f"using fallback for {loadName}: {build_err}"
+                        )
+                        return fallback(*args, **kwargs)
+                    raise
 
                 if hip_clang_path is not None:
                     if prev_hip_clang_path is not None:
