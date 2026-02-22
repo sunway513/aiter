@@ -8,6 +8,12 @@
 
 #include "mha_fwd.h"
 
+#ifdef AITER_CK_FREE
+#define FMHA_NS aiter
+#else
+#define FMHA_NS ck_tile
+#endif
+
 namespace aiter {
 namespace torch_itfs {
 mha_fwd_args get_asm_fmha_fwd_args(bool has_lse,
@@ -47,29 +53,29 @@ mha_fwd_args get_asm_fmha_fwd_args(bool has_lse,
     // lse: (batch_size, nheads, seqlen_q)
     // randval: (batch_size, nheads, seqlen_q, seqlen_k)
 
-    ck_tile::index_t stride_q = q.stride(1);
-    ck_tile::index_t stride_k = k.stride(1);
-    ck_tile::index_t stride_v = v.stride(1);
-    ck_tile::index_t stride_o = out.stride(1);
-    ck_tile::index_t stride_randval = has_dropout_randval ? dropout_randval.stride(2) : 0;
+    int32_t stride_q = q.stride(1);
+    int32_t stride_k = k.stride(1);
+    int32_t stride_v = v.stride(1);
+    int32_t stride_o = out.stride(1);
+    int32_t stride_randval = has_dropout_randval ? dropout_randval.stride(2) : 0;
 
-    ck_tile::index_t nhead_stride_q = q.stride(2);
-    ck_tile::index_t nhead_stride_k = k.stride(2);
-    ck_tile::index_t nhead_stride_v = v.stride(2);
-    ck_tile::index_t nhead_stride_o = out.stride(2);
-    ck_tile::index_t nhead_stride_lse = has_lse ? softmax_lse.stride(1) : 0;
-    ck_tile::index_t nhead_stride_randval = has_dropout_randval ? dropout_randval.stride(1) : 0;
+    int32_t nhead_stride_q = q.stride(2);
+    int32_t nhead_stride_k = k.stride(2);
+    int32_t nhead_stride_v = v.stride(2);
+    int32_t nhead_stride_o = out.stride(2);
+    int32_t nhead_stride_lse = has_lse ? softmax_lse.stride(1) : 0;
+    int32_t nhead_stride_randval = has_dropout_randval ? dropout_randval.stride(1) : 0;
 
-    ck_tile::index_t batch_stride_q = q.stride(0);
-    ck_tile::index_t batch_stride_k = k.stride(0);
-    ck_tile::index_t batch_stride_v = v.stride(0);
-    ck_tile::index_t batch_stride_o = out.stride(0);
+    int32_t batch_stride_q = q.stride(0);
+    int32_t batch_stride_k = k.stride(0);
+    int32_t batch_stride_v = v.stride(0);
+    int32_t batch_stride_o = out.stride(0);
 
-    ck_tile::index_t batch_stride_lse = has_lse ? softmax_lse.stride(0) : 0;
-    ck_tile::index_t batch_stride_randval = has_dropout_randval ? dropout_randval.stride(0) : 0;
+    int32_t batch_stride_lse = has_lse ? softmax_lse.stride(0) : 0;
+    int32_t batch_stride_randval = has_dropout_randval ? dropout_randval.stride(0) : 0;
 
     void *bias_ptr = nullptr;
-    ck_tile::index_t stride_bias = 0;
+    int32_t stride_bias = 0;
 
     if (bias_.has_value()) {
         auto bias = bias_.value();
@@ -155,7 +161,7 @@ mha_fwd_args get_asm_fmha_fwd_args(bool has_lse,
                         mask.left,
                         mask.right,
                         0, // sink_size
-                        static_cast<ck_tile::index_t>(mask.type),
+                        static_cast<int32_t>(mask.type),
                         0, // min_seqlen_q
                         p_dropout,
                         has_dropout_randval,
@@ -292,7 +298,7 @@ std::vector<at::Tensor> fmha_v3_fwd(at::Tensor &q, // [b, sq, hq, d]
         p = torch::empty({ 0 }, opts);
     }
 
-    int64_t counter_offset = batch_size * num_heads * ck_tile::get_warp_size();
+    int64_t counter_offset = batch_size * num_heads * FMHA_NS::get_warp_size();
     auto rng_state = torch::empty({2}, opts.dtype(torch::kInt64));
     auto rng_state_ptr = reinterpret_cast<uint64_t*>(rng_state.data_ptr());
 
@@ -309,7 +315,7 @@ std::vector<at::Tensor> fmha_v3_fwd(at::Tensor &q, // [b, sq, hq, d]
     if (seqlen_k > 0) {
         auto drop_seed_offset = std::make_pair(rng_state_ptr, rng_state_ptr + 1);
         auto stream = at::hip::getCurrentHIPStream();
-        ck_tile::stream_config stream_config{stream};
+        FMHA_NS::stream_config stream_config{stream};
 
         auto args =
             get_asm_fmha_fwd_args(

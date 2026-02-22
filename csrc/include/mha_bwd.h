@@ -306,8 +306,14 @@ struct __attribute__((packed)) fmha_bwd_post_kernel_args
     p2 _p11;
 };
 
+#ifdef AITER_CK_FREE
+__attribute__((visibility("default"))) float mha_bwd(mha_bwd_args, const aiter::stream_config&);
+
+float fmha_v3_bwd(mha_bwd_args, const aiter::stream_config&);
+#else
 __attribute__((visibility("default"))) float mha_bwd(mha_bwd_args, const ck_tile::stream_config&);
 
 float fmha_v3_bwd(mha_bwd_args, const ck_tile::stream_config&);
+#endif
 
 } // namespace aiter
