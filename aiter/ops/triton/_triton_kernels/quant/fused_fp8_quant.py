@@ -14,7 +14,10 @@ except ImportError:
 def _rmsmorm_op(row, weight, n_cols, epsilon):
     row_norm = row * row
     row_norm = tl.sum(row_norm, axis=-1)
-    norm_factor = tl.math.rsqrt((row_norm / n_cols) + epsilon)
+    # Cast to f32 before rsqrt to prevent f64 promotion from Python float epsilon.
+    # Without this, eps (f64) promotes the entire chain to f64, causing
+    # "Unsupported conversion from f64 to f8E4M3FNUZ" in downstream FP8 quant.
+    norm_factor = tl.math.rsqrt(((row_norm / n_cols) + epsilon).to(tl.float32))
 
     rms_norm = row * norm_factor * weight
     return rms_norm
@@ -33,7 +36,9 @@ def _fp8_quant_op(
     x = x.reshape(BLOCK_SIZE_M, NUM_QUANT_BLOCKS, QUANT_BLOCK_SIZE)
     m = tl.maximum(tl.max(tl.abs(x), axis=-1), 1e-10)
     scale_out = m.to(tl.float32) / DTYPE_MAX
-    scale_recip = 1.0 / scale_out.reshape(BLOCK_SIZE_M, NUM_QUANT_BLOCKS, 1)
+    scale_recip = (1.0 / scale_out.reshape(BLOCK_SIZE_M, NUM_QUANT_BLOCKS, 1)).to(
+        tl.float32
+    )
     x = tl.clamp(x * scale_recip, DTYPE_MIN, DTYPE_MAX)
 
     return x, scale_out
@@ -114,7 +119,7 @@ def _fused_rms_fp8_per_tensor_static_quant_kernel(
         norm1 = norm1.to(tl.float32)
     # apply quantization
     scale = tl.load(scale_ptr).to(tl.float32)
-    scale_recip = 1.0 / scale
+    scale_recip = (1.0 / scale).to(tl.float32)
     out1_fp8 = tl.clamp(norm1 * scale_recip, DTYPE_MIN, DTYPE_MAX)
     # store the results
     tl.store(
@@ -758,7 +763,7 @@ def _fused_silu_mul_fp8_per_tensor_static_quant_kernel(
 
     # apply quantization
     scale = tl.load(scale_ptr).to(tl.float32)
-    scale_recip = 1.0 / scale
+    scale_recip = (1.0 / scale).to(tl.float32)
     quant_fp8_out = tl.clamp(silu_o * scale_recip, DTYPE_MIN, DTYPE_MAX)
     # store the results
     tl.store(

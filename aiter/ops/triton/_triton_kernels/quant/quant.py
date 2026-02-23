@@ -22,8 +22,8 @@ def _static_per_tensor_quant_fp8_i8_kernel(
     mask = tl.arange(0, NUM_COL_POW2) < cols
     x = tl.load(x_in_ptr + offs, mask=mask, cache_modifier=".cg")
 
-    scale = tl.load(scale_in_ptr)
-    scale_recip = 1 / scale
+    scale = tl.load(scale_in_ptr).to(tl.float32)
+    scale_recip = (1.0 / scale).to(tl.float32)
 
     qx = (x * scale_recip).to(qx_ptr.dtype.element_ty)
 
@@ -71,7 +71,7 @@ def _dynamic_per_token_quant_fp8_i8_kernel(
 
     m = tl.max(tl.abs(x), axis=-1)
     scale_out = m.to(tl.float32) / DTYPE_MAX
-    scale_recip = 1 / scale_out
+    scale_recip = (1.0 / scale_out).to(tl.float32)
 
     qx = x * scale_recip
     qx = qx.to(qx_ptr.dtype.element_ty)

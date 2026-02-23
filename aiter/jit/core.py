@@ -634,8 +634,6 @@ def build_module(
                 f"{CK_3RDPARTY_DIR}/include",
                 f"{CK_3RDPARTY_DIR}/library/include",
             ]
-        elif os.path.isdir(CK_HELPER_DIR):
-            extra_include_paths.append(CK_HELPER_DIR)
 
         # When CK is not available, define AITER_CK_FREE for all modules
         # so headers use lightweight shims instead of ck_tile/core.hpp

@@ -161,11 +161,28 @@ def _rmsnorm_quant_fallback(
     group_size: int = 0,
     shuffle_scale: bool = False,
 ) -> None:
-    from aiter.ops.triton.normalization.rmsnorm import (
-        rmsnorm2d_fwd_with_dynamicquant as _triton_dynamicquant,
-    )
+    if group_size > 0:
+        # Triton rmsnorm+quant kernel only supports per-token quant.
+        # Decompose: rmsnorm → per-group quantization.
+        from aiter.ops.triton.normalization.rmsnorm import (
+            rms_norm as _triton_rms_norm,
+        )
 
-    _triton_dynamicquant(out, input, scale, weight, epsilon)
+        normed = _triton_rms_norm(input, weight, epsilon)
+        m, n = normed.shape
+        dtype_max = torch.finfo(out.dtype).max
+        normed_g = normed.reshape(-1, group_size).float()
+        amax = normed_g.abs().amax(dim=-1, keepdim=True).clamp(min=1e-12)
+        s = (amax / dtype_max).to(torch.float32)
+        qx = (normed_g / s).to(out.dtype)
+        out.copy_(qx.reshape(m, n))
+        scale.copy_(s.reshape(m, n // group_size))
+    else:
+        from aiter.ops.triton.normalization.rmsnorm import (
+            rmsnorm2d_fwd_with_dynamicquant as _triton_dynamicquant,
+        )
+
+        _triton_dynamicquant(out, input, scale, weight, epsilon)
 
 
 def _add_rmsnorm_quant_fallback(
@@ -179,13 +196,31 @@ def _add_rmsnorm_quant_fallback(
     group_size: int = 0,
     shuffle_scale: bool = False,
 ) -> None:
-    from aiter.ops.triton.normalization.rmsnorm import (
-        rmsnorm2d_fwd_with_add_dynamicquant as _triton_add_dynamicquant,
-    )
+    if group_size > 0:
+        # Triton rmsnorm+quant kernel only supports per-token quant.
+        # Decompose: add+rmsnorm → per-group quantization.
+        from aiter.ops.triton.normalization.rmsnorm import (
+            rmsnorm2d_fwd_with_add as _triton_fwd_with_add,
+        )
 
-    _triton_add_dynamicquant(
-        out, input, residual_in, residual_out, scale, weight, epsilon
-    )
+        normed = torch.empty_like(input)
+        _triton_fwd_with_add(normed, input, residual_in, residual_out, weight, epsilon)
+        m, n = normed.shape
+        dtype_max = torch.finfo(out.dtype).max
+        normed_g = normed.reshape(-1, group_size).float()
+        amax = normed_g.abs().amax(dim=-1, keepdim=True).clamp(min=1e-12)
+        s = (amax / dtype_max).to(torch.float32)
+        qx = (normed_g / s).to(out.dtype)
+        out.copy_(qx.reshape(m, n))
+        scale.copy_(s.reshape(m, n // group_size))
+    else:
+        from aiter.ops.triton.normalization.rmsnorm import (
+            rmsnorm2d_fwd_with_add_dynamicquant as _triton_add_dynamicquant,
+        )
+
+        _triton_add_dynamicquant(
+            out, input, residual_in, residual_out, scale, weight, epsilon
+        )
 
 
 # --- CK/HIP kernels with Triton/PyTorch fallbacks ---
