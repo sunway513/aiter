@@ -401,15 +401,37 @@ def get_torch_act(aType):
     return tmp.get(aType, NotImplementedError)
 
 
-@compile_ops("module_quant")
+def _triton_static_per_tensor_quant(out, input, scale):
+    triton.quant.static_per_tensor_quant_fp8_i8(out, input, scale)
+
+
+def _triton_dynamic_per_tensor_quant(out, input, scale):
+    triton.quant.dynamic_per_tensor_quant_fp8_i8(out, input, scale)
+
+
+def _triton_dynamic_per_token_scaled_quant(
+    out,
+    input,
+    scales,
+    scale_ub=None,
+    shuffle_scale=False,
+    num_rows=None,
+    num_rows_factor=1,
+):
+    triton.quant.dynamic_per_token_quant_fp8_i8(
+        out, input.view(-1, input.shape[-1]), scales
+    )
+
+
+@compile_ops("module_quant", fallback=_triton_static_per_tensor_quant)
 def static_per_tensor_quant(out: Tensor, input: Tensor, scale: Tensor) -> None: ...
 
 
-@compile_ops("module_quant")
+@compile_ops("module_quant", fallback=_triton_dynamic_per_tensor_quant)
 def dynamic_per_tensor_quant(out: Tensor, input: Tensor, scale: Tensor) -> None: ...
 
 
-@compile_ops("module_quant")
+@compile_ops("module_quant", fallback=_triton_dynamic_per_token_scaled_quant)
 def dynamic_per_token_scaled_quant(
     out: torch.Tensor,
     input: torch.Tensor,
