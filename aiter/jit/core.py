@@ -488,7 +488,7 @@ def check_numa():
 
 
 __mds = {}
-_failed_modules = {}  # md_name -> build error, skip rebuild on repeated calls
+_failed_modules = {}  # Tracks modules that failed to build (for fallback fast-path)
 
 
 @torch_compile_guard()
