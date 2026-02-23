@@ -54,8 +54,6 @@ if ENABLE_CK:
     shutil.copytree("3rdparty", "aiter_meta/3rdparty")
 else:
     os.makedirs("aiter_meta/3rdparty", exist_ok=True)
-    if os.path.exists("3rdparty/ck_helper"):
-        shutil.copytree("3rdparty/ck_helper", "aiter_meta/3rdparty/ck_helper")
 shutil.copytree("hsa", "aiter_meta/hsa")
 shutil.copytree("gradlib", "aiter_meta/gradlib")
 shutil.copytree("csrc", "aiter_meta/csrc")
