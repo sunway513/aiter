@@ -60,13 +60,15 @@ def _reshape_and_cache_fallback(
     num_heads = key_cache.shape[1]
     head_size = key.shape[2]
 
-    valid = slot_mapping >= 0
-    slots = slot_mapping[valid]
+    # Use clamp instead of boolean masking to keep fixed-size tensors
+    # (compatible with CUDA graph capture). Invalid slots (< 0) write
+    # harmlessly to block 0 / offset 0.
+    slots = slot_mapping.clamp(min=0)
     block_indices = slots // block_size
     block_offsets = slots % block_size
 
-    k = key[valid]
-    v = value[valid]
+    k = key
+    v = value
 
     do_scale = kv_cache_dtype not in ("auto", "bf16") and k_scale is not None
     if do_scale:
@@ -110,12 +112,11 @@ def _reshape_and_cache_flash_fallback(
 ) -> None:
     # key_cache: [num_blocks, block_size, num_heads, head_size]
     block_size = key_cache.shape[1]
-    valid = slot_mapping >= 0
-    slots = slot_mapping[valid]
+    slots = slot_mapping.clamp(min=0)
     block_indices = slots // block_size
     block_offsets = slots % block_size
-    key_cache[block_indices, block_offsets] = key[valid].to(key_cache.dtype)
-    value_cache[block_indices, block_offsets] = value[valid].to(value_cache.dtype)
+    key_cache[block_indices, block_offsets] = key.to(key_cache.dtype)
+    value_cache[block_indices, block_offsets] = value.to(value_cache.dtype)
 
 
 def _reshape_and_cache_with_pertoken_quant_fallback(
@@ -142,19 +143,20 @@ def _reshape_and_cache_with_pertoken_quant_fallback(
     num_heads = key.shape[1]
     head_size = key.shape[2]
 
-    valid = slot_mapping >= 0
-    slots = slot_mapping[valid]
+    # Use clamp instead of boolean masking to keep fixed-size tensors
+    # (compatible with CUDA graph capture). Invalid slots (< 0) write
+    # harmlessly to block 0 / offset 0.
+    slots = slot_mapping.clamp(min=0)
     block_indices = slots // block_size
     block_offsets = slots % block_size
 
-    k = key[valid]
-    v = value[valid]
-    n_valid = k.shape[0]
+    k = key
+    v = value
 
     # pertoken_quant expects [batch, seq_len, num_heads, head_size]
     k_quant, k_scales = pertoken_quant(k.unsqueeze(1), quant_dtype=key_cache.dtype)
-    k_quant = k_quant.squeeze(1)  # [n_valid, num_heads, head_size]
-    k_scales = k_scales.squeeze(1).squeeze(-1)  # [n_valid, num_heads]
+    k_quant = k_quant.squeeze(1)  # [num_tokens, num_heads, head_size]
+    k_scales = k_scales.squeeze(1).squeeze(-1)  # [num_tokens, num_heads]
 
     v_quant, v_scales = pertoken_quant(v.unsqueeze(1), quant_dtype=value_cache.dtype)
     v_quant = v_quant.squeeze(1)
@@ -170,7 +172,8 @@ def _reshape_and_cache_with_pertoken_quant_fallback(
         # 5D asm layout: [num_blocks, num_heads, block_size/x, head_size, x]
         v_block_x_idx = block_offsets // x
         v_block_x_off = block_offsets % x
-        for i in range(n_valid):
+        n_tokens = v_quant.shape[0]
+        for i in range(n_tokens):
             value_cache[block_indices[i], :, v_block_x_idx[i], :, v_block_x_off[i]] = (
                 v_quant[i]
             )
@@ -185,7 +188,8 @@ def _reshape_and_cache_with_pertoken_quant_fallback(
         v_dequant_scales[block_indices, :, block_offsets] = v_scales
     else:
         # [num_heads, total_tokens] — flat per-token scales
-        for i in range(n_valid):
+        n_tokens = k_scales.shape[0]
+        for i in range(n_tokens):
             k_dequant_scales[:, slots[i]] = k_scales[i]
             v_dequant_scales[:, slots[i]] = v_scales[i]
 
