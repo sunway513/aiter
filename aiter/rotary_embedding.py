@@ -415,27 +415,34 @@ class RotaryEmbedding(nn.Module):
                 )
             return query.view(query_shape), key.view(key_shape)
         else:
+            # rope_cached_positions_fwd_inplace expects SBHD (4D),
+            # but forward_triton uses THD (3D).  Add a batch dim of 1.
+            query_4d = query_.unsqueeze(0)
+            positions_2d = positions.unsqueeze(0)
             if offsets is None:
                 ops.rope_cached_positions_fwd_inplace(
-                    query_,
+                    query_4d,
                     cos,
                     sin,
-                    positions,
+                    positions_2d,
                     rotate_style,
                     reuse_freqs_front_part=True,
                     nope_first=is_nope_first,
                 )
             else:
+                offsets_2d = offsets.unsqueeze(0)
                 ops.rope_cached_positions_offsets_fwd_inplace(
-                    query_,
+                    query_4d,
                     cos,
                     sin,
-                    positions,
-                    offsets,
+                    positions_2d,
+                    offsets_2d,
                     rotate_style,
                     reuse_freqs_front_part=True,
                     nope_first=is_nope_first,
                 )
+            # query_ is a view of query, and query_4d is a view of query_,
+            # so in-place rope already updated query.
             return query.view(query_shape)
 
     def extra_repr(self) -> str:

@@ -83,10 +83,9 @@ def _reshape_and_cache_fallback(
     k_reshaped = k.reshape(-1, num_heads, head_size // x, x)
     key_cache[block_indices, :, :, block_offsets, :] = k_reshaped.to(key_cache.dtype)
 
-    if asm_layout:
-        # value_cache: [num_blocks, num_heads, block_size/x, head_size, x]
-        # Need per-token scatter into the (block_size/x, x) position.
-        # block_offsets maps to (block_offsets // x, block_offsets % x).
+    # Use actual tensor ndim — ATOM always allocates v_cache as 4D
+    if value_cache.ndim == 5:
+        # 5D asm layout: [num_blocks, num_heads, block_size/x, head_size, x]
         v_block_x_idx = block_offsets // x
         v_block_x_off = block_offsets % x
         n_valid = v.shape[0]
@@ -95,7 +94,7 @@ def _reshape_and_cache_fallback(
                 i
             ].to(value_cache.dtype)
     else:
-        # value_cache: [num_blocks, num_heads, head_size, block_size]
+        # 4D layout: [num_blocks, num_heads, head_size, block_size]
         value_cache[block_indices, :, :, block_offsets] = v.to(value_cache.dtype)
 
 
@@ -165,8 +164,10 @@ def _reshape_and_cache_with_pertoken_quant_fallback(
     k_reshaped = k_quant.reshape(-1, num_heads, head_size // x, x)
     key_cache[block_indices, :, :, block_offsets, :] = k_reshaped
 
-    # Store quantized values
-    if asm_layout:
+    # Store quantized values — use actual tensor ndim, not asm_layout flag,
+    # because ATOM always allocates v_cache as 4D [blocks, heads, head_dim, block_size]
+    if value_cache.ndim == 5:
+        # 5D asm layout: [num_blocks, num_heads, block_size/x, head_size, x]
         v_block_x_idx = block_offsets // x
         v_block_x_off = block_offsets % x
         for i in range(n_valid):
@@ -174,15 +175,16 @@ def _reshape_and_cache_with_pertoken_quant_fallback(
                 v_quant[i]
             )
     else:
+        # 4D layout: [num_blocks, num_heads, head_size, block_size]
         value_cache[block_indices, :, :, block_offsets] = v_quant
 
     # Store dequant scales
-    if asm_layout:
-        # [num_blocks, num_heads, block_size]
+    if k_dequant_scales.ndim == 3:
+        # [num_blocks, num_heads, block_size] — asm-style per-block scales
         k_dequant_scales[block_indices, :, block_offsets] = k_scales
         v_dequant_scales[block_indices, :, block_offsets] = v_scales
     else:
-        # [num_heads, total_tokens]
+        # [num_heads, total_tokens] — flat per-token scales
         for i in range(n_valid):
             k_dequant_scales[:, slots[i]] = k_scales[i]
             v_dequant_scales[:, slots[i]] = v_scales[i]
@@ -216,9 +218,11 @@ def _concat_and_cache_mla_fallback(
         block_size = kv_cache.shape[1]
         block_indices = slots // block_size
         block_offsets = slots % block_size
-        kv_cache[block_indices, block_offsets, :, :] = (
-            kv[valid].unsqueeze(1).to(kv_cache.dtype)
-        )
+        data = kv[valid].to(kv_cache.dtype)
+        if data.ndim == 2:
+            # Single head squeezed: add head dim back
+            data = data.unsqueeze(1)
+        kv_cache[block_indices, block_offsets] = data
     else:
         # [num_blocks, block_size, total_dim]
         block_size = kv_cache.shape[1]
