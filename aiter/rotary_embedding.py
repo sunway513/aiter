@@ -145,7 +145,12 @@ class RotaryEmbedding(nn.Module):
         elif AITER_ROPE_NATIVE_BACKEND:
             return self.forward_native(*args, **kwargs)
         else:
-            return self.forward_hip(*args, **kwargs)
+            # Auto-detect CK-free build: if HIP rope module is unavailable,
+            # gracefully fall back to Triton backend.
+            try:
+                return self.forward_hip(*args, **kwargs)
+            except Exception:
+                return self.forward_triton(*args, **kwargs)
 
     def forward_native(
         self,
@@ -358,7 +363,10 @@ class RotaryEmbedding(nn.Module):
 
         self.cos_cache = self.cos_cache.to(query.device, dtype=query.dtype)
         self.sin_cache = self.sin_cache.to(query.device, dtype=query.dtype)
-        cos, sin = self.cos_cache, self.sin_cache
+        # Squeeze to 2D (seq, dim) — cos_cache is 4D (seq, 1, 1, dim) but
+        # the thd rope kernels expect 2D cos/sin for stride unpacking.
+        cos = self.cos_cache.squeeze(1).squeeze(1)
+        sin = self.sin_cache.squeeze(1).squeeze(1)
 
         rotate_style = 0 if self.is_neox_style else 1
 
