@@ -443,6 +443,16 @@ def _triton_dynamic_per_token_scaled_quant(
     triton.quant.dynamic_per_token_quant_fp8_i8(
         out, input.view(-1, input.shape[-1]), scales
     )
+    if shuffle_scale and scales.dim() >= 2:
+        # Triton quant writes scales in row-major (M, K_groups) order.
+        # The C++ kernel with shuffle_scale=True writes column-major order,
+        # which the downstream GEMM kernel expects (is_x_scale_transposed=True).
+        # Transpose the scale data in-place to match.
+        orig_shape = scales.shape
+        K_groups = orig_shape[-1]
+        M = scales.numel() // K_groups
+        transposed = scales.view(M, K_groups).T.contiguous()
+        scales.view(-1).copy_(transposed.view(-1))
 
 
 def _fallback_dynamic_per_group_scaled_quant_fp4(
