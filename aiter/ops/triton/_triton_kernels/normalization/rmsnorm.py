@@ -28,7 +28,7 @@ def _per_token_quant(
     scale_out = row_max / DTYPE_MAX
     scale_out = tl.where(scale_out == 0, 1.0, scale_out)
 
-    scale_recip = 1 / scale_out
+    scale_recip = (1.0 / scale_out).to(tl.float32)
 
     qx = x * scale_recip
 

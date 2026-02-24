@@ -145,7 +145,12 @@ class RotaryEmbedding(nn.Module):
         elif AITER_ROPE_NATIVE_BACKEND:
             return self.forward_native(*args, **kwargs)
         else:
-            return self.forward_hip(*args, **kwargs)
+            # Auto-detect CK-free build: if HIP rope module is unavailable,
+            # gracefully fall back to Triton backend.
+            try:
+                return self.forward_hip(*args, **kwargs)
+            except Exception:
+                return self.forward_triton(*args, **kwargs)
 
     def forward_native(
         self,
@@ -358,7 +363,10 @@ class RotaryEmbedding(nn.Module):
 
         self.cos_cache = self.cos_cache.to(query.device, dtype=query.dtype)
         self.sin_cache = self.sin_cache.to(query.device, dtype=query.dtype)
-        cos, sin = self.cos_cache, self.sin_cache
+        # Squeeze to 2D (seq, dim) — cos_cache is 4D (seq, 1, 1, dim) but
+        # the thd rope kernels expect 2D cos/sin for stride unpacking.
+        cos = self.cos_cache.squeeze(1).squeeze(1)
+        sin = self.sin_cache.squeeze(1).squeeze(1)
 
         rotate_style = 0 if self.is_neox_style else 1
 
@@ -407,27 +415,34 @@ class RotaryEmbedding(nn.Module):
                 )
             return query.view(query_shape), key.view(key_shape)
         else:
+            # rope_cached_positions_fwd_inplace expects SBHD (4D),
+            # but forward_triton uses THD (3D).  Add a batch dim of 1.
+            query_4d = query_.unsqueeze(0)
+            positions_2d = positions.unsqueeze(0)
             if offsets is None:
                 ops.rope_cached_positions_fwd_inplace(
-                    query_,
+                    query_4d,
                     cos,
                     sin,
-                    positions,
+                    positions_2d,
                     rotate_style,
                     reuse_freqs_front_part=True,
                     nope_first=is_nope_first,
                 )
             else:
+                offsets_2d = offsets.unsqueeze(0)
                 ops.rope_cached_positions_offsets_fwd_inplace(
-                    query_,
+                    query_4d,
                     cos,
                     sin,
-                    positions,
-                    offsets,
+                    positions_2d,
+                    offsets_2d,
                     rotate_style,
                     reuse_freqs_front_part=True,
                     nope_first=is_nope_first,
                 )
+            # query_ is a view of query, and query_4d is a view of query_,
+            # so in-place rope already updated query.
             return query.view(query_shape)
 
     def extra_repr(self) -> str:

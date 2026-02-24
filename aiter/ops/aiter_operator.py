@@ -7,8 +7,6 @@ from functools import partial
 from typing import Any
 import torch
 
-MD_NAME = "module_aiter_operator"
-
 
 def cmdGenFunc(op_name: str, input: Tensor, other: Tensor) -> dict[str, Any]:
     dtype_str = str(input.dtype).split(".")[1] + "_" + str(other.dtype).split(".")[1]
@@ -64,49 +62,65 @@ binary_div_build_args = partial(cmdGenFunc, "div")
 
 
 @compile_ops(
-    "module_aiter_operator", gen_func=binary_add_build_args, gen_fake=binary_fake_shape
+    "module_aiter_operator_add",
+    gen_func=binary_add_build_args,
+    gen_fake=binary_fake_shape,
 )
 def add(input: Tensor, other: Tensor) -> Tensor: ...
 
 
 @compile_ops(
-    "module_aiter_operator", gen_func=binary_sub_build_args, gen_fake=binary_fake_shape
+    "module_aiter_operator_sub",
+    gen_func=binary_sub_build_args,
+    gen_fake=binary_fake_shape,
 )
 def sub(input: Tensor, other: Tensor) -> Tensor: ...
 
 
 @compile_ops(
-    "module_aiter_operator", gen_func=binary_mul_build_args, gen_fake=binary_fake_shape
+    "module_aiter_operator_mul",
+    gen_func=binary_mul_build_args,
+    gen_fake=binary_fake_shape,
 )
 def mul(input: Tensor, other: Tensor) -> Tensor: ...
 
 
 @compile_ops(
-    "module_aiter_operator", gen_func=binary_div_build_args, gen_fake=binary_fake_shape
+    "module_aiter_operator_div",
+    gen_func=binary_div_build_args,
+    gen_fake=binary_fake_shape,
 )
 def div(input: Tensor, other: Tensor) -> Tensor: ...
 
 
 @compile_ops(
-    "module_aiter_operator", gen_func=binary_add_build_args, gen_fake=binary_fake_shape
+    "module_aiter_operator_add",
+    gen_func=binary_add_build_args,
+    gen_fake=binary_fake_shape,
 )
 def add_(input: Tensor, other: Tensor) -> Tensor: ...
 
 
 @compile_ops(
-    "module_aiter_operator", gen_func=binary_sub_build_args, gen_fake=binary_fake_shape
+    "module_aiter_operator_sub",
+    gen_func=binary_sub_build_args,
+    gen_fake=binary_fake_shape,
 )
 def sub_(input: Tensor, other: Tensor) -> Tensor: ...
 
 
 @compile_ops(
-    "module_aiter_operator", gen_func=binary_mul_build_args, gen_fake=binary_fake_shape
+    "module_aiter_operator_mul",
+    gen_func=binary_mul_build_args,
+    gen_fake=binary_fake_shape,
 )
 def mul_(input: Tensor, other: Tensor) -> Tensor: ...
 
 
 @compile_ops(
-    "module_aiter_operator", gen_func=binary_div_build_args, gen_fake=binary_fake_shape
+    "module_aiter_operator_div",
+    gen_func=binary_div_build_args,
+    gen_fake=binary_fake_shape,
 )
 def div_(input: Tensor, other: Tensor) -> Tensor: ...
 

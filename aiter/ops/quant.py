@@ -16,13 +16,35 @@ from . import triton
 from .enum import ActivationType, QuantType
 
 
-@compile_ops("module_smoothquant")
+def _fallback_smoothquant_fwd(out, input, x_scale, y_scale):
+    # SmoothQuant: y = quant(input * x_scale), y_scale = per-token scale
+    x = input.float() * x_scale.float()
+    dtype_max = torch.finfo(out.dtype).max
+    amax = x.abs().amax(dim=-1, keepdim=True).clamp(min=1e-12)
+    s = (amax / dtype_max).to(torch.float32)
+    qx = (x / s).to(out.dtype)
+    out.copy_(qx)
+    y_scale.view(-1).copy_(s.reshape(-1))
+
+
+def _fallback_moe_smoothquant_fwd(out, input, x_scale, topk_ids, y_scale):
+    # MOE SmoothQuant: apply x_scale indexed by topk_ids, then per-token quant
+    x = input.float() * x_scale[topk_ids].float()
+    dtype_max = torch.finfo(out.dtype).max
+    amax = x.abs().amax(dim=-1, keepdim=True).clamp(min=1e-12)
+    s = (amax / dtype_max).to(torch.float32)
+    qx = (x / s).to(out.dtype)
+    out.copy_(qx)
+    y_scale.view(-1).copy_(s.reshape(-1))
+
+
+@compile_ops("module_smoothquant", fallback=_fallback_smoothquant_fwd)
 def smoothquant_fwd(
     out: Tensor, input: Tensor, x_scale: Tensor, y_scale: Tensor
 ) -> None: ...
 
 
-@compile_ops("module_smoothquant")
+@compile_ops("module_smoothquant", fallback=_fallback_moe_smoothquant_fwd)
 def moe_smoothquant_fwd(
     out: Tensor, input: Tensor, x_scale: Tensor, topk_ids: Tensor, y_scale: Tensor
 ) -> None: ...
@@ -401,15 +423,96 @@ def get_torch_act(aType):
     return tmp.get(aType, NotImplementedError)
 
 
-@compile_ops("module_quant")
+def _triton_static_per_tensor_quant(out, input, scale):
+    triton.quant.static_per_tensor_quant_fp8_i8(out, input, scale)
+
+
+def _triton_dynamic_per_tensor_quant(out, input, scale):
+    triton.quant.dynamic_per_tensor_quant_fp8_i8(out, input, scale)
+
+
+def _triton_dynamic_per_token_scaled_quant(
+    out,
+    input,
+    scales,
+    scale_ub=None,
+    shuffle_scale=False,
+    num_rows=None,
+    num_rows_factor=1,
+):
+    triton.quant.dynamic_per_token_quant_fp8_i8(
+        out, input.view(-1, input.shape[-1]), scales
+    )
+    if shuffle_scale and scales.dim() >= 2:
+        # Triton quant writes scales in row-major (M, K_groups) order.
+        # The C++ kernel with shuffle_scale=True writes column-major order,
+        # which the downstream GEMM kernel expects (is_x_scale_transposed=True).
+        # Transpose the scale data in-place to match.
+        orig_shape = scales.shape
+        K_groups = orig_shape[-1]
+        M = scales.numel() // K_groups
+        transposed = scales.view(M, K_groups).T.contiguous()
+        scales.view(-1).copy_(transposed.view(-1))
+
+
+def _fallback_dynamic_per_group_scaled_quant_fp4(
+    out,
+    input,
+    scales,
+    group_size=32,
+    shuffle_scale=True,
+    num_rows=None,
+    num_rows_factor=1,
+):
+    if group_size != 32:
+        raise NotImplementedError(
+            f"CK-free FP4 quant fallback only supports group_size=32, got {group_size}"
+        )
+    y, sc = per_1x32_f4_quant(input, shuffle=shuffle_scale)
+    out.view(torch.uint8).copy_(y.view(torch.uint8))
+    scales.view(torch.uint8).copy_(sc.view(torch.uint8))
+
+
+def _fallback_smooth_per_token_scaled_quant(
+    out,
+    input,
+    scales,
+    smooth_scale,
+    smooth_scale_map=None,
+    shuffle_scale=False,
+    num_rows=None,
+    num_rows_factor=1,
+    smooth_scale_map_hash=None,
+    enable_ps=True,
+):
+    # Apply smooth scaling then per-token dynamic quantization
+    if smooth_scale_map is not None:
+        x = input.float() * smooth_scale[smooth_scale_map].float()
+    else:
+        x = input.float() * smooth_scale.float()
+    dtype_max = torch.finfo(out.dtype).max
+    amax = x.abs().amax(dim=-1, keepdim=True).clamp(min=1e-12)
+    s = (amax / dtype_max).to(torch.float32)
+    qx = (x / s).to(out.dtype)
+    out.copy_(qx)
+    scales.view(-1).copy_(s.reshape(-1))
+
+
+def _fallback_partial_transpose(out, input, num_rows):
+    # partial_transpose: transpose the valid rows of a scale tensor
+    n = num_rows.item() if isinstance(num_rows, torch.Tensor) else num_rows
+    out[:n].copy_(input[:n])
+
+
+@compile_ops("module_quant", fallback=_triton_static_per_tensor_quant)
 def static_per_tensor_quant(out: Tensor, input: Tensor, scale: Tensor) -> None: ...
 
 
-@compile_ops("module_quant")
+@compile_ops("module_quant", fallback=_triton_dynamic_per_tensor_quant)
 def dynamic_per_tensor_quant(out: Tensor, input: Tensor, scale: Tensor) -> None: ...
 
 
-@compile_ops("module_quant")
+@compile_ops("module_quant", fallback=_triton_dynamic_per_token_scaled_quant)
 def dynamic_per_token_scaled_quant(
     out: torch.Tensor,
     input: torch.Tensor,
@@ -421,7 +524,7 @@ def dynamic_per_token_scaled_quant(
 ) -> None: ...
 
 
-@compile_ops("module_quant")
+@compile_ops("module_quant", fallback=_fallback_dynamic_per_group_scaled_quant_fp4)
 def dynamic_per_group_scaled_quant_fp4(
     out: torch.Tensor,
     input: torch.Tensor,
@@ -437,7 +540,7 @@ def dynamic_per_group_scaled_quant_fp4(
     ...
 
 
-@compile_ops("module_quant")
+@compile_ops("module_quant", fallback=_fallback_smooth_per_token_scaled_quant)
 def smooth_per_token_scaled_quant(
     out: torch.Tensor,
     input: torch.Tensor,
@@ -452,7 +555,7 @@ def smooth_per_token_scaled_quant(
 ) -> None: ...
 
 
-@compile_ops("module_quant")
+@compile_ops("module_quant", fallback=_fallback_partial_transpose)
 def partial_transpose(
     out: Tensor,
     input: Tensor,

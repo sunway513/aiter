@@ -6,7 +6,8 @@ import triton.language as tl
 def _rmsmorm_op(row, weight, n_cols, epsilon):
     row_norm = row * row
     row_norm = tl.sum(row_norm, axis=-1)
-    norm_factor = tl.math.rsqrt((row_norm / n_cols) + epsilon)
+    # Cast to f32 before rsqrt to prevent f64 promotion from Python float epsilon.
+    norm_factor = tl.math.rsqrt(((row_norm / n_cols) + epsilon).to(tl.float32))
 
     rms_norm = row * norm_factor * weight
     return rms_norm
