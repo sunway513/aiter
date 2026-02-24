@@ -143,7 +143,7 @@ def validate(csv_path, verbose=False):
     n_cktile = len(df) - n_asm
     unique_nk = df[["N", "K"]].drop_duplicates()
 
-    print(f"\n=== Summary ===")
+    print("\n=== Summary ===")
     print(f"  Total shapes:       {len(df)}")
     print(f"  Unique [N,K] pairs: {len(unique_nk)}")
     print(f"  M range:            [{df['M'].min()}, {df['M'].max()}]")
@@ -160,7 +160,7 @@ def validate(csv_path, verbose=False):
     print(f"  splitK > 0:         {(df['splitK'] > 0).sum()} shapes")
 
     # Result
-    print(f"\n=== Validation Result ===")
+    print("\n=== Validation Result ===")
     if errors:
         for e in errors:
             print(f"  FAIL: {e}")
