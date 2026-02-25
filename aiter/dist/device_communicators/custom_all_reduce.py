@@ -54,7 +54,10 @@ class CustomAllreduce:
         self,
         group: ProcessGroup,
         device: Union[int, str, torch.device],
-        max_size=8192 * 1024 * 8 * 2, # In allreduce 2stage writemode, use 2x tmp buffer
+        max_size=8192
+        * 1024
+        * 8
+        * 2,  # In allreduce 2stage writemode, use 2x tmp buffer
     ) -> None:
         """
         Args:
@@ -158,7 +161,9 @@ class CustomAllreduce:
         self.input_buffer = torch.empty(max_size, dtype=torch.uint8, device=self.device)
         # This is a pre-registered IPC buffer for output. In eager mode, kernel
         # writes results to this buffer, then it's copied to the actual output
-        self.output_buffer = torch.empty(max_size, dtype=torch.uint8, device=self.device)
+        self.output_buffer = torch.empty(
+            max_size, dtype=torch.uint8, device=self.device
+        )
         # This is a buffer for storing the tuples of pointers pointing to
         # IPC buffers from all ranks. Each registered tuple has size of
         # 8*world_size bytes where world_size is at most 8. Allocating 8MB
@@ -243,10 +248,14 @@ class CustomAllreduce:
         return handles, offsets
 
     def register_input_buffer(self, inp: torch.Tensor):
+        if self.disabled:
+            return
         handles, offsets = self._get_ipc_meta(inp)
         ops.register_input_buffer(self._ptr, inp, handles, offsets)
-    
+
     def register_output_buffer(self, out: torch.Tensor):
+        if self.disabled:
+            return
         handles, offsets = self._get_ipc_meta(out)
         ops.register_output_buffer(self._ptr, out, handles, offsets)
 
@@ -314,7 +323,7 @@ class CustomAllreduce:
                     use_new=use_new,
                     open_fp8_quant=open_fp8_quant,
                     registered_input=True,
-                    registered_output=True
+                    registered_output=True,
                 )
             else:
                 # if warm up, mimic the allocation pattern
@@ -330,7 +339,7 @@ class CustomAllreduce:
                 use_new=use_new,
                 open_fp8_quant=open_fp8_quant,
                 registered_input=False,
-                registered_output=False
+                registered_output=False,
             )
 
     def reduce_scatter(
@@ -420,7 +429,9 @@ class CustomAllreduce:
             if out is None:
                 out = torch.empty(inp.shape, dtype=fp8, device=inp.device)
             if scale_out is None:
-                scale_out = torch.empty(inp.shape[:-1] + (1,), dtype=torch.float32, device=inp.device)
+                scale_out = torch.empty(
+                    inp.shape[:-1] + (1,), dtype=torch.float32, device=inp.device
+                )
             ops.fused_allreduce_rmsnorm_quant(
                 self._ptr,
                 inp,
@@ -449,15 +460,25 @@ class CustomAllreduce:
         if self._IS_CAPTURING:
             if torch.cuda.is_current_stream_capturing():
                 return self.fused_ar_rms(
-                    input, residual_inp, w=weight, eps=eps, registered=True, use_1stage=use_1stage,
+                    input,
+                    residual_inp,
+                    w=weight,
+                    eps=eps,
+                    registered=True,
+                    use_1stage=use_1stage,
                 )
             else:
                 return torch.zeros_like(input), torch.zeros_like(input)
         else:
             return self.fused_ar_rms(
-                input, residual_inp, w=weight, eps=eps, registered=False, use_1stage=use_1stage,
+                input,
+                residual_inp,
+                w=weight,
+                eps=eps,
+                registered=False,
+                use_1stage=use_1stage,
             )
-    
+
     def custom_fused_ar_rms_quant(
         self,
         input: torch.Tensor,
@@ -472,15 +493,29 @@ class CustomAllreduce:
         if self._IS_CAPTURING:
             if torch.cuda.is_current_stream_capturing():
                 return self.fused_ar_rms(
-                    input, residual_inp, w=weight, eps=eps, registered=True, use_1stage=use_1stage, post_per_token_quant=True,
+                    input,
+                    residual_inp,
+                    w=weight,
+                    eps=eps,
+                    registered=True,
+                    use_1stage=use_1stage,
+                    post_per_token_quant=True,
                 )
             else:
                 dummy_out = torch.zeros(input.shape, dtype=fp8, device=input.device)
-                dummy_scale_out = torch.zeros(input.shape[:-1] + (1,), dtype=torch.float32, device=input.device)
+                dummy_scale_out = torch.zeros(
+                    input.shape[:-1] + (1,), dtype=torch.float32, device=input.device
+                )
                 return dummy_out, torch.zeros_like(input), dummy_scale_out
         else:
             return self.fused_ar_rms(
-                input, residual_inp, w=weight, eps=eps, registered=False, use_1stage=use_1stage, post_per_token_quant=True,
+                input,
+                residual_inp,
+                w=weight,
+                eps=eps,
+                registered=False,
+                use_1stage=use_1stage,
+                post_per_token_quant=True,
             )
 
     def close(self):

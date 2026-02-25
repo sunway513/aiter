@@ -12,7 +12,88 @@ from ..jit.utils.chip_info import get_cu_num
 from ..utility import dtypes
 
 
-@compile_ops("module_moe_asm", fc_name="biased_grouped_topk")
+# Fallback wrappers matching HIP function signatures for CK-free builds.
+# These are invoked by @compile_ops when module_moe_asm fails to build.
+def _biased_grouped_topk_hip_fallback(
+    gating_output: torch.Tensor,
+    correction_bias: torch.Tensor,
+    topk_weights: torch.Tensor,
+    topk_ids: torch.Tensor,
+    num_expert_group: int,
+    topk_grp: int,
+    need_renorm: bool,
+    routed_scaling_factor: float = 1.0,
+) -> None:
+    topk = topk_ids.shape[1]
+    w, ids = biased_grouped_topk_torch(
+        gating_output,
+        correction_bias,
+        topk,
+        need_renorm,
+        num_expert_group,
+        topk_grp,
+    )
+    if routed_scaling_factor != 1.0:
+        w = w * routed_scaling_factor
+    topk_weights.copy_(w)
+    topk_ids.copy_(ids)
+
+
+def _grouped_topk_fallback(
+    gating_output: torch.Tensor,
+    topk_weights: torch.Tensor,
+    topk_ids: torch.Tensor,
+    num_expert_group: int,
+    topk_group: int,
+    need_renorm: bool,
+    is_softmax: bool = True,
+    routed_scaling_factor: float = 1.0,
+) -> None:
+    topk = topk_ids.shape[1]
+    scoring_func = "softmax" if is_softmax else "sigmoid"
+    w, ids = grouped_topk_torch(
+        gating_output,
+        topk,
+        need_renorm,
+        num_expert_group,
+        topk_group,
+        scoring_func,
+    )
+    if routed_scaling_factor != 1.0:
+        w = w * routed_scaling_factor
+    topk_weights.copy_(w)
+    topk_ids.copy_(ids)
+
+
+def _moe_fused_gate_fallback(
+    input: torch.Tensor,
+    bias: torch.Tensor,
+    topk_weights: torch.Tensor,
+    topk_ids: torch.Tensor,
+    num_expert_group: int,
+    topk_group: int,
+    topk: int,
+    n_share_experts_fusion: int,
+    routed_scaling_factor: float = 1.0,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    w, ids = biased_grouped_topk_torch(
+        input,
+        bias,
+        topk,
+        True,
+        num_expert_group,
+        topk_group,
+    )
+    if routed_scaling_factor != 1.0:
+        w = w * routed_scaling_factor
+    return w, ids
+
+
+@compile_ops(
+    "module_moe_asm",
+    fc_name="biased_grouped_topk",
+    fallback=_biased_grouped_topk_hip_fallback,
+)
 def biased_grouped_topk_hip(
     gating_output: torch.Tensor,
     correction_bias: torch.Tensor,
@@ -25,7 +106,7 @@ def biased_grouped_topk_hip(
 ) -> None: ...
 
 
-@compile_ops("module_moe_asm")
+@compile_ops("module_moe_asm", fallback=_grouped_topk_fallback)
 def grouped_topk(
     gating_output: torch.Tensor,
     topk_weights: torch.Tensor,
@@ -58,7 +139,11 @@ def gen_moe_fused_gate_fake_tensor(
     return [output, indices]
 
 
-@compile_ops("module_moe_asm", gen_fake=gen_moe_fused_gate_fake_tensor)
+@compile_ops(
+    "module_moe_asm",
+    gen_fake=gen_moe_fused_gate_fake_tensor,
+    fallback=_moe_fused_gate_fallback,
+)
 def moe_fused_gate(
     input: torch.Tensor,
     bias: torch.Tensor,

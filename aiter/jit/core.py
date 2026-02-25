@@ -971,7 +971,20 @@ def compile_ops(
                         os.environ.pop("HIP_CLANG_PATH", None)
 
                 if is_python_module:
-                    module = get_module(md_name)
+                    try:
+                        module = get_module(md_name)
+                    except (ModuleNotFoundError, ImportError) as import_err:
+                        # Waiting rank: leader's build failed, module doesn't exist
+                        if fallback is not None:
+                            _failed_modules[md_name] = import_err
+                            logger.warning(
+                                f"[aiter] JIT module [{md_name}] not found after build, "
+                                f"using fallback for {loadName}: {import_err}"
+                            )
+                            return fallback(*args, **kwargs)
+                        raise RuntimeError(
+                            f"[aiter] module [{md_name}] failed to build on another rank"
+                        ) from import_err
                 if md_name not in __mds:
                     __mds[md_name] = module
 
