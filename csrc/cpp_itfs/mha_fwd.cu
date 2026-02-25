@@ -181,7 +181,11 @@ std::tuple<int, int, int> get_grid_dim(const mha_fwd_args& a, int ts_qo, const s
     return std::make_tuple(gdx, gdy, gdz);
 }
 
+#ifdef AITER_CK_FREE
+float fmha_fwd_v3(mha_fwd_args a, const aiter::stream_config& s)
+#else
 float fmha_fwd_v3(mha_fwd_args a, const ck_tile::stream_config& s)
+#endif
 {
     std::string arch_id = get_gpu_arch();
 
@@ -236,7 +240,11 @@ float fmha_fwd_v3(mha_fwd_args a, const ck_tile::stream_config& s)
     int bdx              = (a.hdim_q == 192 && a.hdim_v == 128) ? 256 : 512;
     auto [gdx, gdy, gdz] = get_grid_dim(a, cfg.ts_qo, arch_id);
 
+#ifdef AITER_CK_FREE
+    return aiter::launch_kernel(s, [=](const aiter::stream_config& s_) mutable {
+#else
     return ck_tile::launch_kernel(s, [=](const ck_tile::stream_config& s_) mutable {
+#endif
         // Explicit assignment forces evaluation order and prevents compiler from
         // reordering operations that could lead to accessing uninitialized args
         void* args_ptr     = &args;
@@ -333,7 +341,11 @@ float fmha_fwd_ck(mha_fwd_args a, const ck_tile::stream_config& s)
 }
 #endif
 
+#ifdef AITER_CK_FREE
+float mha_fwd(mha_fwd_args args, const aiter::stream_config& s)
+#else
 float mha_fwd(mha_fwd_args args, const ck_tile::stream_config& s)
+#endif
 {
     float ret = -1;
 

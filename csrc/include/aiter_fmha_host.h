@@ -1,25 +1,18 @@
 // SPDX-License-Identifier: MIT
 // Copyright (C) 2024-2026, Advanced Micro Devices, Inc. All rights reserved.
 //
-// Minimal ck_tile:: namespace compatibility shim for V3 ASM builds.
-// Provides just enough types/functions so that mha_fwd.h, mha_bwd.h,
-// and the V3 ASM source files compile without the full CK source tree.
+// Host-side utilities in the aiter:: namespace for CK-free builds.
+// Provides stream_config, launch_kernel, and other types that non-CK
+// modules need without depending on the ck_tile:: namespace.
 
 #pragma once
 
 #include <cstdint>
 #include <functional>
 #include <tuple>
-#include <variant>
 #include <hip/hip_runtime.h>
 
-namespace ck_tile {
-
-// ---------------------------------------------------------------------------
-// Numeric type aliases (match CK definitions)
-// ---------------------------------------------------------------------------
-using index_t      = int32_t;
-using long_index_t = int64_t;
+namespace aiter {
 
 // ---------------------------------------------------------------------------
 // stream_config  (identical layout to CK host/stream_config.hpp)
@@ -43,7 +36,6 @@ namespace detail {
 template <typename... Callables>
 inline void launch_and_check(const stream_config& sc, Callables&&... callables)
 {
-    // Execute each callable; abort on first HIP error
     if(!((static_cast<void>(callables(sc)), hipPeekAtLastError() == hipSuccess) && ...))
     {
         hipError_t err = hipGetLastError();
@@ -59,11 +51,6 @@ inline float launch_kernel(const stream_config& s, Callables&&... callables)
     detail::launch_and_check(s, std::forward<Callables>(callables)...);
     return 0;
 }
-
-// ---------------------------------------------------------------------------
-// get_warp_size
-// ---------------------------------------------------------------------------
-inline constexpr int get_warp_size() { return 64; }
 
 // ---------------------------------------------------------------------------
 // log2e_v<T>
@@ -82,7 +69,6 @@ struct number
 
 // ---------------------------------------------------------------------------
 // Simple tuple with .at(number<N>{}) accessor
-// Used by make_generic_attention_mask_coordinates_from_lr_window return value
 // ---------------------------------------------------------------------------
 template <typename... Ts>
 struct simple_tuple
@@ -104,26 +90,26 @@ constexpr auto make_tuple(Ts... args)
 // Vendored from CK block_masking.hpp:752-773 (pure host-side math)
 // ---------------------------------------------------------------------------
 inline constexpr auto
-make_generic_attention_mask_coordinates_from_lr_window(index_t left_size,
-                                                       index_t right_size,
-                                                       index_t sink_size,
-                                                       index_t y_total,
-                                                       index_t x_total,
+make_generic_attention_mask_coordinates_from_lr_window(int32_t left_size,
+                                                       int32_t right_size,
+                                                       int32_t sink_size,
+                                                       int32_t y_total,
+                                                       int32_t x_total,
                                                        bool is_top_left = true)
 {
-    index_t left_size_tmp  = is_top_left ? y_total - 1 : x_total - 1;
-    index_t right_size_tmp = is_top_left ? x_total - 1 : y_total - 1;
+    int32_t left_size_tmp  = is_top_left ? y_total - 1 : x_total - 1;
+    int32_t right_size_tmp = is_top_left ? x_total - 1 : y_total - 1;
 
     left_size  = left_size < 0 ? left_size_tmp : left_size;
     right_size = right_size < 0 ? right_size_tmp : right_size;
 
-    index_t x_tmp = is_top_left ? 0 : x_total - y_total;
-    index_t y_tmp = is_top_left ? 0 : y_total - x_total;
+    int32_t x_tmp = is_top_left ? 0 : x_total - y_total;
+    int32_t y_tmp = is_top_left ? 0 : y_total - x_total;
 
-    index_t x = 1 + right_size + x_tmp;
-    index_t y = 1 + left_size + y_tmp;
+    int32_t x = 1 + right_size + x_tmp;
+    int32_t y = 1 + left_size + y_tmp;
 
     return make_tuple(y, x, sink_size, y_total, x_total);
 }
 
-} // namespace ck_tile
+} // namespace aiter

@@ -127,7 +127,11 @@ std::tuple<std::string, std::string, std::string> get_heuristic_kernel(std::stri
     return std::make_tuple(preProcessingKernelName, dQdKdVKernelName, postProcessingKernelName);
 }
 
+#ifdef AITER_CK_FREE
+float mha_bwd(mha_bwd_args a, const aiter::stream_config& s)
+#else
 float mha_bwd(mha_bwd_args a, const ck_tile::stream_config& s)
+#endif
 {
     float asm_ret = fmha_v3_bwd(a, s);
 #if ONLY_FAV3
@@ -236,7 +240,11 @@ float mha_bwd(mha_bwd_args a, const ck_tile::stream_config& s)
 #endif
 }
 
+#ifdef AITER_CK_FREE
+float fmha_v3_bwd(mha_bwd_args a, const aiter::stream_config& s)
+#else
 float fmha_v3_bwd(mha_bwd_args a, const ck_tile::stream_config& s)
+#endif
 {
     if(a.nhead_stride_dq_acc < a.stride_dq_acc)
     {
@@ -258,11 +266,11 @@ float fmha_v3_bwd(mha_bwd_args a, const ck_tile::stream_config& s)
     // 3: window mask
     // -1: unsupported (e.g., ck generic mask)
     auto asm_mask_type = [&]() {
-        if(a.mask_type == static_cast<ck_tile::index_t>(mask_enum::no_mask))
+        if(a.mask_type == static_cast<int32_t>(mask_enum::no_mask))
         {
             return 0;
         }
-        else if(a.mask_type == static_cast<ck_tile::index_t>(mask_enum::window_generic))
+        else if(a.mask_type == static_cast<int32_t>(mask_enum::window_generic))
         {
             // CK generic mask isn't supported here
             return -1;
@@ -273,7 +281,7 @@ float fmha_v3_bwd(mha_bwd_args a, const ck_tile::stream_config& s)
             {
                 // Note: this case includes both top-left and bottom-right masks, but they share the same
                 // kernel selection logic in bwd since the attention sink isn't supported in bwd yet
-                return (a.mask_type == static_cast<ck_tile::index_t>(mask_enum::mask_top_left)) ? 1 : 2;
+                return (a.mask_type == static_cast<int32_t>(mask_enum::mask_top_left)) ? 1 : 2;
             }
             else if(a.window_size_left == -1 && a.window_size_right == -1)
             {
@@ -459,7 +467,11 @@ float fmha_v3_bwd(mha_bwd_args a, const ck_tile::stream_config& s)
     dqdkdv_args.ptr_lse    = a.lse_ptr;
     dqdkdv_args.ptr_d      = a.d_ptr;
     dqdkdv_args.scalar     = a.scale;
+#ifdef AITER_CK_FREE
+    dqdkdv_args.log2e      = aiter::log2e_v<float>;
+#else
     dqdkdv_args.log2e      = ck_tile::log2e_v<float>;
+#endif
     dqdkdv_args.ratio      = a.nhead_q / a.nhead_k;
     dqdkdv_args.seqlen_q   = a.seqlen_q;
     dqdkdv_args.seqlen_k   = a.seqlen_k;
@@ -515,16 +527,29 @@ float fmha_v3_bwd(mha_bwd_args a, const ck_tile::stream_config& s)
         // Note: sink_size=0 is passed as the 3rd parameter (attention sink not supported in bwd
         // yet)
         auto sink_size    = 0;
+#ifdef AITER_CK_FREE
+        auto generic_mask = aiter::make_generic_attention_mask_coordinates_from_lr_window(
+            a.window_size_left,
+            a.window_size_right,
+            sink_size,
+            a.seqlen_q,
+            a.seqlen_k,
+            (a.mask_type == static_cast<int32_t>(mask_enum::mask_top_left) ||
+             a.mask_type == static_cast<int32_t>(mask_enum::window_generic)));
+        dqdkdv_args.mask_y = generic_mask.at(aiter::number<0>{});
+        dqdkdv_args.mask_x = generic_mask.at(aiter::number<1>{});
+#else
         auto generic_mask = ck_tile::make_generic_attention_mask_coordinates_from_lr_window(
             a.window_size_left,
             a.window_size_right,
             sink_size,
             a.seqlen_q,
             a.seqlen_k,
-            (a.mask_type == static_cast<ck_tile::index_t>(mask_enum::mask_top_left) ||
-             a.mask_type == static_cast<ck_tile::index_t>(mask_enum::window_generic)));
+            (a.mask_type == static_cast<int32_t>(mask_enum::mask_top_left) ||
+             a.mask_type == static_cast<int32_t>(mask_enum::window_generic)));
         dqdkdv_args.mask_y = generic_mask.at(ck_tile::number<0>{});
         dqdkdv_args.mask_x = generic_mask.at(ck_tile::number<1>{});
+#endif
     }
 
     arg_size                  = sizeof(dqdkdv_args);
@@ -545,10 +570,17 @@ float fmha_v3_bwd(mha_bwd_args a, const ck_tile::stream_config& s)
 
     if(!need_post_processing)
     {
+#ifdef AITER_CK_FREE
+        return aiter::launch_kernel(
+            s,
+            [=](const aiter::stream_config& s_) { pre_kernel_launch(); },
+            [=](const aiter::stream_config& s_) { dqdkdv_kernel_launch(); });
+#else
         return ck_tile::launch_kernel(
             s,
             [=](const ck_tile::stream_config& s_) { pre_kernel_launch(); },
             [=](const ck_tile::stream_config& s_) { dqdkdv_kernel_launch(); });
+#endif
     }
 
     int dq_acc_element_size = a.v3_atomic_fp32 ? 4 : 2;
@@ -577,11 +609,19 @@ float fmha_v3_bwd(mha_bwd_args a, const ck_tile::stream_config& s)
         impl_ptr_post->launch_kernel(
             {&post_args, &arg_size, gdx, gdy, gdz, bdx, 1, 1, s.stream_id_});
     };
+#ifdef AITER_CK_FREE
+    return aiter::launch_kernel(
+        s,
+        [=](const aiter::stream_config& s_) { pre_kernel_launch(); },
+        [=](const aiter::stream_config& s_) { dqdkdv_kernel_launch(); },
+        [=](const aiter::stream_config& s_) { post_kernel_launch(); });
+#else
     return ck_tile::launch_kernel(
         s,
         [=](const ck_tile::stream_config& s_) { pre_kernel_launch(); },
         [=](const ck_tile::stream_config& s_) { dqdkdv_kernel_launch(); },
         [=](const ck_tile::stream_config& s_) { post_kernel_launch(); });
+#endif
 }
 
 } // namespace aiter
