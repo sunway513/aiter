@@ -470,40 +470,6 @@ def fused_moe_1stage(
             a2_scale,
             activation,
         )
-    elif quant_type == QuantType.per_1x32 and activation == ActivationType.Swiglu:
-        # Swiglu+per_1x32: skip normal quantization, pass activations directly
-        if q_dtype_a == dtypes.fp8:
-            # fp8 prefill path: convert to fp8 with dummy e8m0 scales
-            a1 = hidden_states.to(dtypes.fp8)
-            M_sort = sorted_ids.shape[0]
-            N = a1.shape[-1]
-            a1_scale = torch.ones(
-                [M_sort, N // 32], dtype=dtypes.fp8_e8m0, device=a1.device
-            )
-        else:
-            # bf16 decode path: pass bf16 activations directly
-            a1 = hidden_states
-            a1_scale = None
-        E, model_dim, inter_dim = get_inter_dim(w1.shape, w2.shape)
-        w1_scale = w1_scale.view(E, -1)
-        w2_scale = w2_scale.view(E, -1)
-        aiter.fmoe_g1u1(
-            moe_buf,
-            a1,
-            w1,
-            w2,
-            sorted_ids,
-            sorted_weights,
-            sorted_expert_ids,
-            num_valid_ids,
-            topk,
-            a1_scale,
-            w1_scale,
-            w2_scale,
-            kernelName,
-            fc2_smooth_scale=None,
-            activation=activation,
-        )
     else:
         quant_func = get_quant(quant_type)
         if hidden_states.dtype != q_dtype_a:
@@ -661,8 +627,6 @@ fused_moe_1stage_dict = {
         (ActivationType.Silu,   QuantType.per_1x128,   dtypes.bf16,     dtypes.fp8,    dtypes.fp8,    True,   False) : aiter.fmoe_fp8_blockscale_g1u1,
         (ActivationType.Silu,   QuantType.per_Token,   dtypes.bf16,    dtypes.bf16,   dtypes.bf16,   False,   False) : aiter.fmoe,
         (ActivationType.Silu,   QuantType.per_Token,   dtypes.bf16,     dtypes.fp8,    dtypes.fp8,    True,   True)  : aiter.fmoe_g1u1_tkw1,
-        (ActivationType.Swiglu, QuantType.per_1x32,   dtypes.bf16,   dtypes.bf16,  dtypes.fp4x2,    True,   False) : aiter.fmoe_g1u1,
-        (ActivationType.Swiglu, QuantType.per_1x32,   dtypes.bf16,    dtypes.fp8,  dtypes.fp4x2,    True,   False) : aiter.fmoe_g1u1,
     }
 }
 # fmt: on
@@ -835,8 +799,6 @@ def get_2stage_cfgs(
                 run_1stage = token > 32
             elif q_type == QuantType.per_Token and q_dtype_w == dtypes.fp8:
                 run_1stage = token > 16
-            elif q_type == QuantType.per_1x32:
-                run_1stage = True
             elif q_type != QuantType.per_1x32:
                 run_1stage = token < 256
 
