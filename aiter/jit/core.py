@@ -779,7 +779,7 @@ def build_module(
 
         extra_include_paths = []
 
-        _is_ckfree = not os.path.isdir(CK_3RDPARTY_DIR)
+        _is_ckfree = not os.path.isfile(os.path.join(CK_3RDPARTY_DIR, "CMakeLists.txt"))
         if not _is_ckfree:
             extra_include_paths += [
                 f"{CK_HELPER_DIR}",
@@ -974,7 +974,7 @@ def get_args_of_build(ops_name: str, exclude=[]):
             # parse all ops, return list
             if ops_name == "all":
                 # Auto-exclude CK-dependent modules in CK-free builds
-                if not os.path.isdir(CK_3RDPARTY_DIR):
+                if not os.path.isfile(os.path.join(CK_3RDPARTY_DIR, "CMakeLists.txt")):
                     ck_excludes = _get_ck_exclude_modules()
                     exclude = list(set(exclude) | ck_excludes)
                     logger.info(
