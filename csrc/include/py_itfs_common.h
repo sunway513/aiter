@@ -58,14 +58,14 @@ const constexpr auto torch_fp4x2 = torch::kUInt8;
 #endif
 
 // clang-format off
-#if ENABLE_CK
+// t2ck maps PyTorch types to ck_tile types. Always available because
+// ck_tile_shim.h provides these types in CK-free builds.
 template <typename T> struct t2ck;
 template <> struct t2ck<float> { using type = ck_tile::fp32_t; };
 template <> struct t2ck<c10::Half> { using type = ck_tile::fp16_t; };
 template <> struct t2ck<c10::BFloat16> { using type = ck_tile::bf16_t; };
 template <> struct t2ck<int32_t> { using type = ck_tile::index_t; };
 template <> struct t2ck<int8_t> { using type = ck_tile::int8_t; };
-#endif
 // clang-format on
 
 // common utility functions
