@@ -13,6 +13,11 @@ PACKAGE_NAME = "amd-aiter"
 BUILD_TARGET = os.environ.get("BUILD_TARGET", "auto")
 PREBUILD_KERNELS = int(os.environ.get("PREBUILD_KERNELS", 0))
 ENABLE_CK = int(os.environ.get("ENABLE_CK", "1"))
+# Auto-disable CK if the submodule directory doesn't exist (CK-free builds)
+_ck_default_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "3rdparty/composable_kernel")
+if ENABLE_CK and not os.path.exists(os.environ.get("CK_DIR", _ck_default_dir)):
+    ENABLE_CK = 0
+    print(f"[aiter] CK directory not found, auto-disabling CK (CK-free build)")
 
 
 def getMaxJobs():
