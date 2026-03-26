@@ -443,12 +443,17 @@ def fused_moe_1stage(
         if hidden_states.dtype != q_dtype_a:
             if quant_type == QuantType.per_1x128:
                 quant_func = functools.partial(quant_func, transpose_scale=True)
-            a1, a1_scale = quant_func(
-                hidden_states,
-                scale=a1_scale,
-                quant_dtype=q_dtype_a,
-                num_rows=num_local_tokens,
-            )
+            # CK-free: for MXFP4 with fp8 activations, skip quant to fp4x2
+            # (fp8 activations are already quantized, fmoe_g1u1 handles them)
+            if quant_type == QuantType.per_1x32 and q_dtype_a == dtypes.fp8:
+                a1 = hidden_states
+            else:
+                a1, a1_scale = quant_func(
+                    hidden_states,
+                    scale=a1_scale,
+                    quant_dtype=q_dtype_a,
+                    num_rows=num_local_tokens,
+                )
         else:
             assert (
                 a1_scale is not None or quant_type == QuantType.No
