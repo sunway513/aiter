@@ -22,7 +22,15 @@ from aiter.utility import fp4_utils
 
 BLOCK_SIZE_M = 32
 
-_USE_OPUS_MOE_SORTING = os.environ.get("AITER_USE_OPUS_MOE_SORTING", "0") == "1"
+# Auto-enable OPUS MOE sorting when CK is unavailable (gfx1250 CK-free builds)
+_ck_free = not os.path.isdir(
+    os.path.join(os.path.dirname(__file__), "..", "3rdparty", "composable_kernel", "include")
+)
+_USE_OPUS_MOE_SORTING = (
+    os.environ.get("AITER_USE_OPUS_MOE_SORTING", "1" if _ck_free else "0") == "1"
+)
+if _USE_OPUS_MOE_SORTING:
+    logger.info("[MOE] OPUS MOE sorting enabled (CK-free)" if _ck_free else "[MOE] OPUS MOE sorting enabled (env override)")
 
 
 def _moe_sorting_impl(
@@ -574,6 +582,7 @@ fused_moe_1stage_dict = {
         (ActivationType.Silu,          QuantType.No,  dtypes.fp16,   dtypes.fp16,   dtypes.fp16,   False,   False) : aiter.fmoe,
         (ActivationType.Gelu,   QuantType.per_Token,  dtypes.bf16,    dtypes.fp8,   dtypes.i4x2,    True,   False) : aiter.fmoe_g1u1,
         (ActivationType.Silu,    QuantType.per_1x32,  dtypes.bf16,  dtypes.fp4x2,  dtypes.fp4x2,    True,   False) : aiter.fmoe_g1u1,
+        (ActivationType.Swiglu,  QuantType.per_1x32,  dtypes.bf16,    dtypes.fp8,  dtypes.fp4x2,    True,   False) : aiter.fmoe_g1u1,  # CK-free: MXFP4 Swiglu (a=fp8, w=fp4)
         (ActivationType.Silu,   QuantType.per_Token,  dtypes.bf16,     dtypes.i8,     dtypes.i8,    True,   False) : aiter.fmoe_g1u1,
         (ActivationType.Gelu,   QuantType.per_Token,  dtypes.bf16,     dtypes.i8,     dtypes.i8,    True,   False) : aiter.fmoe_g1u1,
         (ActivationType.Silu,   QuantType.per_Token,  dtypes.bf16,    dtypes.fp8,    dtypes.fp8,    True,   False) : aiter.fmoe_g1u1,
@@ -585,6 +594,7 @@ fused_moe_1stage_dict = {
     "gfx950":
     {
         (ActivationType.Silu,    QuantType.per_1x32,   dtypes.bf16,   dtypes.fp4x2,  dtypes.fp4x2,    True,   False) : aiter.fmoe_g1u1,
+        (ActivationType.Swiglu,  QuantType.per_1x32,   dtypes.bf16,     dtypes.fp8,  dtypes.fp4x2,    True,   False) : aiter.fmoe_g1u1,  # CK-free: MXFP4 Swiglu (a=fp8, w=fp4)
         (ActivationType.Silu,   QuantType.per_1x128,   dtypes.bf16,     dtypes.fp8,    dtypes.fp8,    True,   False) : aiter.fmoe_fp8_blockscale_g1u1,
         (ActivationType.Gelu,   QuantType.per_1x128,   dtypes.bf16,     dtypes.fp8,    dtypes.fp8,    True,   False) : aiter.fmoe_fp8_blockscale_g1u1,
         (ActivationType.Silu,   QuantType.per_Token,   dtypes.bf16,    dtypes.bf16,   dtypes.bf16,   False,   False) : aiter.fmoe,
@@ -880,7 +890,9 @@ def get_2stage_cfgs(
                 run_1stage = token > 32
             elif q_type == QuantType.per_Token and q_dtype_w == dtypes.fp8:
                 run_1stage = token > 16 or inter_dim % 128 != 0
-            elif q_type != QuantType.per_1x32:
+            elif q_type == QuantType.per_1x32:
+                run_1stage = True  # MXFP4: use 1stage path
+            else:
                 run_1stage = token < 256
 
         block_m = (
