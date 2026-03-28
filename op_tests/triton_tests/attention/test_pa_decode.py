@@ -191,6 +191,7 @@ def test_paged_attn(
         pytest.skip("B>={4} and SEQ_LEN>={8192} tests are too slow")
     # Remap fnuz to arch-appropriate fp8 dtype
     from aiter.utility.dtypes import fp8
+
     if dtype == torch.float8_e4m3fnuz:
         dtype = fp8
     if kv_cache_dtype == torch.float8_e4m3fnuz:
@@ -319,15 +320,11 @@ def test_paged_attn_per_token_quant(
     (
         key_cache_tri_quant,
         k_scale,
-    ) = pertoken_quant(
-        key_cache_tri, scale_dtype=torch.float32, quant_dtype=fp8
-    )
+    ) = pertoken_quant(key_cache_tri, scale_dtype=torch.float32, quant_dtype=fp8)
     (
         value_cache_tri_quant,
         v_scale,
-    ) = pertoken_quant(
-        value_cache_tri, scale_dtype=torch.float32, quant_dtype=fp8
-    )
+    ) = pertoken_quant(value_cache_tri, scale_dtype=torch.float32, quant_dtype=fp8)
 
     paged_attention_decode(
         triton_output,

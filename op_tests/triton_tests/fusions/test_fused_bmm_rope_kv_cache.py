@@ -84,6 +84,7 @@ def test_fused_fp4_bmm_rope_cat_and_cache_mla(
 
     if cache_dtype == torch.uint8:
         from aiter.utility.dtypes import fp8
+
         cache_dtype_actual = fp8
 
     kv_cache = torch.zeros(
@@ -257,6 +258,7 @@ def test_fused_fp8_bmm_rope_cat_and_cache_mla(
 
     if cache_dtype == torch.uint8:
         from aiter.utility.dtypes import fp8
+
         cache_dtype_actual = fp8
 
     kv_cache = torch.zeros(
