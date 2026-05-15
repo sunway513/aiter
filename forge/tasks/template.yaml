@@ -1,0 +1,33 @@
+# Task-as-prompt contract. One YAML = one agent-executable experiment.
+# Every field is required; predict-verify rejects the task otherwise.
+# See src/aiter_forge/predict_verify.py and docs/architecture.md.
+
+id: example-task-id
+
+hypothesis: >
+  Describe the expected outcome and reasoning, grounded in architecture
+  details (VGPR budget, LDS capacity, MFMA granularity, occupancy target).
+  An agent reading this should be able to predict the result before
+  actually running any candidate.
+
+candidates:
+  - name: baseline
+    params:
+      tile_m: 64
+      tile_n: 128
+  - name: prediction
+    params:
+      tile_m: 96
+      tile_n: 128
+
+verify:
+  # Shell command; {param} placeholders are substituted per candidate.
+  cmd: "echo tput_ms=1.0 for_{tile_m}_{tile_n}"
+  # Regex with ONE capture group; matched against stdout.
+  parse: "tput_ms=([0-9.]+)"
+
+success: "prediction beats baseline by >= 5%"
+
+finalize:
+  # Path (relative to repo root) where the learnings draft is written.
+  learning_path: learnings/moe/example_task_id.md

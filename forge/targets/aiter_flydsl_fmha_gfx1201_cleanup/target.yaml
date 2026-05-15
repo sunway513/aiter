@@ -1,0 +1,77 @@
+# targets/aiter_flydsl_fmha_gfx1201_cleanup/target.yaml
+#
+# AVO target: apply the `flydsl-internal-types-cleanup` skill to the gfx1201
+# FlyDSL FMHA kernel produced by the `flydsl_fmha_gfx1201` tuning target.
+#
+# This target is the FIRST concrete user of the skill in aiter-forge.
+# It validates that skill-guided refactor preserves ASM hash + perf parity
+# on a real production-shape kernel (Wan2.1 DiT attention).
+#
+# Per-target pattern: pair this with the existing `flydsl_fmha_gfx1201` target
+# to compare pre-cleanup vs post-cleanup numbers without re-tuning.
+
+name: aiter-flydsl-fmha-gfx1201-cleanup
+
+description: |
+  Apply the flydsl-internal-types-cleanup skill to the gfx1201 FMHA kernel.
+  Cleanup is purely a refactor — no algorithmic change. Goal is to make the
+  kernel match FlyDSL's preferred internal-types style while preserving final
+  ISA byte-for-byte, correctness vs SDPA, and Wan2.1 e2e wall time.
+
+  Skill: .claude/skills/flydsl-internal-types-cleanup/SKILL.md
+  Agent: agents/flydsl-cleanup.md
+  AITER PR: ROCm/aiter#2969 (first concrete user)
+
+kernel:
+  # Same kernel as targets/flydsl_fmha_gfx1201, refactored in place.
+  # Path is relative to $AITER_ROOT (mounted at /opt/aiter inside wan-best container).
+  path: aiter/ops/flydsl/kernels/flash_attn_func_gfx1201.py
+  repo_env: AITER_ROOT
+  language: flydsl
+
+skill:
+  name: flydsl-internal-types-cleanup
+  source: .claude/skills/flydsl-internal-types-cleanup/SKILL.md
+  replacement_map: .claude/skills/flydsl-internal-types-cleanup/replacement_map.json
+  verifier: .claude/skills/flydsl-internal-types-cleanup/verification.sh
+
+correctness:
+  command: >
+    cd $AITER_ROOT &&
+    FLIR_CHIP=gfx1201 PYTHONPATH=$AITER_ROOT
+    python -m pytest aiter/ops/flydsl/tests/test_flash_attn_func_gfx1201.py -x -q --tb=short
+  pass_pattern: "passed"
+
+benchmark:
+  command: >
+    cd $AITER_ROOT &&
+    FLIR_CHIP=gfx1201 PYTHONPATH=$AITER_ROOT
+    python aiter/ops/flydsl/tests/test_flash_attn_func_gfx1201.py
+    --benchmark -b {batch} -h {heads} -s {seq_len} -d {head_dim}
+    --dtype {dtype} --causal {causal}
+  shapes:
+    # Wan2.1 production shape — primary acceptance gate.
+    - {batch: 1, heads: 12, seq_len: 32768, head_dim: 128, dtype: bf16, causal: false}
+    # Smaller shape for fast iteration during the cleanup loop.
+    - {batch: 2, heads: 12, seq_len: 4096,  head_dim: 128, dtype: bf16, causal: false}
+  aggregate: geomean
+
+scoring:
+  primary_metric: tflops
+  higher_is_better: true
+
+environment:
+  gpu: R9600D                # gfx1201, RDNA4
+  container: wan-best        # FlyDSL + AITER + Wan2.1 e2e harness
+  arch: gfx1201
+
+baselines:
+  pre_cleanup:
+    description: "Tuned FMHA kernel from targets/flydsl_fmha_gfx1201, pre-cleanup."
+    asm_sha256: "<filled by ir-inspector before cleanup begins>"
+    kernel_tflops: 49.4      # B=1 H=12 S=32768 D=128 bf16
+    cosine_sim_min: 0.99999  # vs SDPA on Wan2.1 shape
+    e2e_wall_s: 460.9        # Wan2.1 video gen end-to-end
+
+# Quantitative pass/fail gates live in acceptance.yaml so the predict-verify
+# runner can enforce them without parsing this descriptor.

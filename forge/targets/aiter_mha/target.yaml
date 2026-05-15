@@ -1,0 +1,36 @@
+# targets/aiter_mha/target.yaml
+#
+# Portable target config. Machine-specific paths are resolved at runtime
+# via environment variables. Copy targets/local.env.example to targets/local.env
+# and fill in machine-specific values.
+#
+name: aiter-flash-attention-triton
+description: AITER Flash Attention Triton kernel (forward pass). Phase 1 uses Triton; FlyDSL is the eventual authoring target.
+
+kernel:
+  # Relative to $AITER_ROOT (set in env or targets/local.env)
+  path: aiter/ops/triton/_triton_kernels/attention/mha.py
+  repo_env: AITER_ROOT       # environment variable holding the repo root
+  language: triton
+
+correctness:
+  # pytest test_mha with a small subset: HEAD_SZ=128, hq=16, hk=16 for fast correctness check (~20s)
+  command: "cd $AITER_ROOT && python -m pytest op_tests/triton_tests/attention/test_mha.py::test_mha -x -k '128-16-16-128-128-1' --no-header -q"
+  pass_pattern: "passed"  # pytest prints "N passed" on success
+
+benchmark:
+  # Triton perf_report output: table with provider columns like "fwd(TFLOPS)"
+  command: "cd $AITER_ROOT && python op_tests/op_benchmarks/triton/bench_mha.py -b {batch} -hq {hq} -hk {hk} -d {d} -sq {sq} -sk {sk} -metric throughput"
+  shapes:
+    - {batch: 1, hq: 32, hk: 8, d: 128, sq: 1, sk: 8192}      # GQA decode (latency bound)
+    - {batch: 4, hq: 16, hk: 16, d: 128, sq: 4096, sk: 4096}   # MHA prefill (compute bound)
+    - {batch: 1, hq: 48, hk: 48, d: 128, sq: 1024, sk: 1024}   # MHA medium
+  aggregate: geomean
+
+scoring:
+  primary_metric: tflops
+  higher_is_better: true
+  # Parser handles Triton perf_report table format (real MI355X output):
+  #   BATCH    HQ    HK  N_CTX_Q  N_CTX_K  BF16-fwd(TFLOPS) (TFLOPS)
+  # 0    4.0  16.0  16.0   4096.0   4096.0                 816.804288
+  output_format: triton_perf_report

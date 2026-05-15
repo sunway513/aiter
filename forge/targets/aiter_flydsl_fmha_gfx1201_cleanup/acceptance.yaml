@@ -1,0 +1,62 @@
+# targets/aiter_flydsl_fmha_gfx1201_cleanup/acceptance.yaml
+#
+# Quantitative pass/fail gates for the cleanup target. Read by the
+# predict-verify runner; any gate failing aborts acceptance.
+#
+# Baselines come from `target.yaml#baselines.pre_cleanup`. Numbers below
+# define the *post-cleanup* must-meet thresholds.
+
+gates:
+
+  # G1/G2/G3 cleanup groups must preserve the final ISA byte-for-byte.
+  # If any of these flips to false, the failing group is reverted; the
+  # target as a whole still passes if all per-shape perf + cosine gates
+  # below remain green and the failing group is documented in the
+  # learning entry.
+  asm_hash_equal:
+    G1_constants: true
+    G2_index_casts: true
+    G3_vectors: true
+    # G4 and G5 are not required to preserve ASM hash — the MLIR lowering
+    # path differs intentionally. They are gated on perf + correctness only.
+
+  # Correctness — cosine similarity vs PyTorch SDPA on the Wan2.1
+  # production shape. Must match or exceed the pre-cleanup baseline.
+  cosine_sim_min:
+    metric: cosine_similarity_vs_sdpa
+    shape: {batch: 1, heads: 12, seq_len: 32768, head_dim: 128, dtype: bf16, causal: false}
+    threshold: 0.999985
+
+  # Per-shape kernel TFLOPS — must stay within ±2% of pre-cleanup baseline.
+  kernel_tflops_min:
+    shape: {batch: 1, heads: 12, seq_len: 32768, head_dim: 128, dtype: bf16, causal: false}
+    threshold_tflops: 48.4         # 0.98 × 49.4 baseline
+
+  # End-to-end Wan2.1 video gen wall time (full pipeline, not just the
+  # attention kernel). Must stay within ±2% of pre-cleanup baseline.
+  e2e_wall_s_max:
+    workload: wan2.1
+    threshold_seconds: 466         # 1.011 × 460.9 baseline
+
+  # Compile-time sanity: refactored kernel must build clean on gfx1201.
+  compile:
+    command: >
+      cd $AITER_ROOT &&
+      FLIR_CHIP=gfx1201 PYTHONPATH=$AITER_ROOT
+      python -c "import aiter.ops.flydsl.kernels.flash_attn_func_gfx1201"
+    must_exit: 0
+
+  # No new env-flag knobs introduced by the cleanup — surface area unchanged.
+  complexity:
+    enforce: aiter_forge.complexity
+    file: aiter/ops/flydsl/kernels/flash_attn_func_gfx1201.py
+    must_pass: true
+
+# How a failed gate is handled.
+on_fail:
+  asm_hash_equal: revert_failing_group_only
+  cosine_sim_min: revert_all_groups
+  kernel_tflops_min: revert_failing_group_only
+  e2e_wall_s_max: revert_all_groups
+  compile: halt_and_escalate
+  complexity: halt_and_escalate

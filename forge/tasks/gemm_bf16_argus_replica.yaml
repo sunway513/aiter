@@ -1,0 +1,63 @@
+# Task-as-prompt: replicate ARGUS paper Table 2 BF16 Square GEMM on MI355X.
+# This is a retroactive record of the tuning process described in
+# results/gemm_bf16/summary.md. Structure is validated by
+# aiter_forge.predict_verify.validate_spec.
+
+id: gemm_bf16_argus_replica
+
+hypothesis: >
+  ARGUS paper (arxiv 2604.18616) reported AITER BF16 GEMM at 0.62× geomean
+  vs ARGUS on MI300X. We hypothesize that (i) `b_to_lds=True` with
+  `b_preshuffle=False` is the dominant knob for FlyDSL HGEMM on gfx950,
+  (ii) a single tile anchor (128×128×64 w2×2 b_lds async) will be within
+  5% of per-shape optimum at most shapes, and (iii) tuned FlyDSL can
+  close >50% of the gap to `gemm_a16w16_asm` at M ≤ 2048.
+
+candidates:
+  - name: flydsl_default
+    params:
+      tile_m: 128
+      tile_n: 128
+      tile_k: 64
+      block_m_warps: 1
+      block_n_warps: 4
+      auto_shuffle_b: true
+  - name: universal_anchor
+    params:
+      tile_m: 128
+      tile_n: 128
+      tile_k: 64
+      block_m_warps: 2
+      block_n_warps: 2
+      b_to_lds: true
+      b_preshuffle: false
+      auto_shuffle_b: false
+      async_copy: true
+  - name: small_shape_wide_k
+    params:
+      tile_m: 128
+      tile_n: 128
+      tile_k: 128
+      block_m_warps: 2
+      block_n_warps: 2
+      b_to_lds: true
+      b_preshuffle: false
+      auto_shuffle_b: false
+      async_copy: true
+  - name: m4096_specific
+    params:
+      tile_m: 128
+      tile_n: 256
+      tile_k: 64
+      block_m_warps: 1
+      block_n_warps: 4
+      async_copy: true
+
+verify:
+  cmd: "python3 scripts/bench_gemm_bf16.py --shapes={M} --output=results/gemm_bf16/verify_{M}.jsonl"
+  parse: "flydsl_tuned\\s+([0-9.]+)\\s+TFLOPS"
+
+success: "tuned FlyDSL ≥ +30% over flydsl_default at M ∈ {1024, 2048, 4096}; ≥ +10% at M ∈ {8192, 16384}"
+
+finalize:
+  learning_path: learnings/gemm/bf16_b_to_lds_breakthrough.md
