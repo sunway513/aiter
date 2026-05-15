@@ -1,0 +1,26 @@
+# forge.yaml — AITER-Forge configuration
+# Copy this file to forge.yaml and fill in your values.
+# forge.yaml is gitignored and will not be committed.
+
+gpu:
+  # GPU node address. Use "localhost" if running directly on the GPU machine.
+  host: localhost
+
+  # SSH username (required when host is not localhost)
+  user: ""
+
+  # Path to SSH private key (optional, uses default SSH key if empty)
+  ssh_key: ""
+
+  # Jump host for SSH tunneling (optional, format: user@host)
+  jump_host: ""
+
+  # Path to AITER repository on the GPU node
+  aiter_root: /opt/aiter
+
+# LLM configuration (optional)
+# Remove or comment out this section to run in manual/benchmark mode.
+# llm:
+#   provider: anthropic
+#   api_key_env: ANTHROPIC_API_KEY
+#   model: claude-sonnet-4-20250514

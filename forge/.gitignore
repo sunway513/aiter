@@ -1,0 +1,26 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# C extensions
+*.so
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+
+# Testing
+.pytest_cache/
+
+# Optimization logs
+optimization_logs/
+
+# Machine-specific target config
+targets/local.env
+
+# User configuration (contains credentials)
+forge.yaml

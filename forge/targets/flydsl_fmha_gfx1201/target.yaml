@@ -1,0 +1,117 @@
+# targets/flydsl_fmha_gfx1201/target.yaml
+#
+# FlyDSL Flash Attention for R9600D (gfx1201, RDNA4)
+#
+# Port of the merged FMHA kernel (PR #225, kernels/flash_attn_func.py)
+# from CDNA (MFMA 32x32x16, wave64) to RDNA4 (WMMA 16x16x16, wave32).
+#
+# Primary use case: Wan2.1 DiT attention (B=2, H=12, S=18900, D=128, bf16, non-causal)
+# Current baseline: Triton FA @ 95ms, SDPA @ 148ms, target: <60ms
+#
+name: flydsl-fmha-gfx1201
+
+description: |
+  FlyDSL Flash Multi-Head Attention for AMD Radeon AI PRO R9600D (gfx1201).
+  Adapts the production FMHA kernel (flash_attn_func.py) for RDNA4 architecture:
+    - WMMA 16x16x16 BF16 (instead of MFMA 32x32x16)
+    - Wave32 (instead of wave64)
+    - 64KB LDS per CU pair (instead of 64KB/160KB on CDNA)
+  Target workload: Wan2.1 video generation DiT attention layer.
+
+kernel:
+  path: kernels/flash_attn_func_gfx1201.py
+  repo_env: FLYDSL_ROOT
+  language: flydsl
+
+correctness:
+  command: >
+    cd $FLYDSL_ROOT &&
+    FLIR_CHIP=gfx1201 PYTHONPATH=$FLYDSL_ROOT
+    python -m pytest tests/kernels/test_flash_attn_func_gfx1201.py -x -q --tb=short
+  pass_pattern: "passed"
+
+benchmark:
+  command: >
+    cd $FLYDSL_ROOT &&
+    FLIR_CHIP=gfx1201 PYTHONPATH=$FLYDSL_ROOT
+    python tests/kernels/test_flash_attn_func_gfx1201.py
+    --benchmark -b {batch} -h {heads} -s {seq_len} -d {head_dim}
+    --dtype {dtype} --causal {causal}
+  shapes:
+    # ── Wan2.1 DiT primary target ──
+    - {batch: 2, heads: 12, seq_len: 18900, head_dim: 128, dtype: bf16, causal: false}
+    # ── Smaller sequence (for faster iteration) ──
+    - {batch: 2, heads: 12, seq_len: 4096, head_dim: 128, dtype: bf16, causal: false}
+    - {batch: 2, heads: 12, seq_len: 8192, head_dim: 128, dtype: bf16, causal: false}
+    # ── Standard LLM shapes ──
+    - {batch: 1, heads: 32, seq_len: 4096, head_dim: 128, dtype: bf16, causal: true}
+    - {batch: 4, heads: 16, seq_len: 4096, head_dim: 128, dtype: bf16, causal: false}
+    # ── Stress test ──
+    - {batch: 1, heads: 12, seq_len: 32768, head_dim: 128, dtype: bf16, causal: false}
+  aggregate: geomean
+
+scoring:
+  primary_metric: tflops
+  higher_is_better: true
+
+baselines:
+  sdpa:
+    description: "PyTorch SDPA on gfx1201"
+    value: 148ms  # B=2 H=12 S=18900 D=128 bf16
+  triton_fa:
+    description: "Custom Triton FA (BM=256 BN=32 W=8)"
+    value: 95ms
+  target:
+    description: "4090 Flash Attention 2"
+    value: 34ms
+
+validation:
+  precision:
+    compute: bf16
+    weight: bf16
+    activation: bf16
+    peak_tflops: 99  # R9600D BF16 WMMA official spec
+
+  gpu:
+    arch: gfx1201
+    isolation: hip_visible_devices
+    memory_limit_gb: 32
+
+adaptation_notes: |
+  Key changes from flash_attn_func.py (CDNA) → gfx1201 (RDNA4):
+
+  1. WMMA instruction:
+     - CDNA: mfma_f32_32x32x16bf16 (32x32 tile, K=16, wave64)
+     - RDNA4: wmma_f32_16x16x16_bf16 (16x16 tile, K=16, wave32)
+     - Fragment sizes: A/B = v8bf16 → v4bf16, C = v16f32 → v4f32
+
+  2. Thread/wave mapping:
+     - CDNA: 4 waves × 64 threads = 256 threads per block
+     - RDNA4: 8 waves × 32 threads = 256 threads per block
+     - Lane decomposition changes for all warp-level ops
+
+  3. Tile sizes:
+     - CDNA: BLOCK_M=128/256, BLOCK_N=64 (fits MFMA 32x32 naturally)
+     - RDNA4: BLOCK_M=64/128, BLOCK_N=32 (fits WMMA 16x16)
+     - Fewer rows per wave: 32 → 16
+
+  4. Online softmax reduction:
+     - CDNA: warp shuffle widths [32, 16, 8, 4, 2, 1] over 64 lanes
+     - RDNA4: warp shuffle widths [16, 8, 4, 2, 1] over 32 lanes
+
+  5. LDS layout:
+     - Same 64KB capacity, but bank/swizzle patterns may differ
+     - XOR16 swizzle needs verification on RDNA4
+
+  6. Memory access:
+     - buffer_load still works on RDNA4
+     - DMA-to-LDS (async copy) availability needs verification
+     - Cache hierarchy differences may affect prefetch strategy
+
+  Reference files:
+    - Source kernel: kernels/flash_attn_func.py (1125 lines, CDNA)
+    - WMMA wrapper: aiter/ops/flydsl/kernels/splitk_hgemm.py:WmmaHalf_m16n16k16
+    - Wave32 utils: flydsl/src/flydsl/runtime/device.py:get_warp_size()
+    - gfx1201 SMEM: flydsl/src/flydsl/utils/smem_allocator.py (64KB)
+    - gfx1250 FA PR: ROCm/FlyDSL#335 (jli/gfx12-kernels, closed but has gfx12 code)
+    - Triton FA baseline: fw-bringup/scripts/bench_attn_r9600d_final.py

@@ -1,0 +1,56 @@
+# targets/flydsl_moe_fp4/target.yaml
+#
+# Example tuning target for FlyDSL MoE FP4 (A4W4) kernel.
+# Demonstrates the validation block for precision/FLOPS/GPU enforcement.
+#
+# This target is a template — update paths and commands for your environment.
+#
+name: flydsl-moe-stage1-fp4
+
+kernel:
+  path: aiter/ops/flydsl/kernels/mixed_moe_gemm_2stage.py
+  repo_env: AITER_ROOT
+  language: flydsl
+
+correctness:
+  command: "cd $AITER_ROOT && python -m pytest op_tests/flydsl_tests/test_moe_fp4.py -x -q"
+  pass_pattern: "passed"
+
+benchmark:
+  command: "cd $AITER_ROOT && python op_tests/op_benchmarks/flydsl/bench_moe_fp4.py --tokens {tokens} --experts {experts} --dim {dim} --inter-dim {inter_dim} --topk {topk}"
+  shapes:
+    - {tokens: 128, experts: 128, dim: 5120, inter_dim: 16384, topk: 8}
+    - {tokens: 128, experts: 8, dim: 4096, inter_dim: 14336, topk: 2}
+    - {tokens: 128, experts: 256, dim: 6144, inter_dim: 4096, topk: 8}
+  aggregate: geomean
+
+scoring:
+  primary_metric: tflops
+  higher_is_better: true
+
+validation:
+  precision:
+    compute: fp4
+    weight: fp4
+    activation: fp4
+    peak_tflops: 5200
+
+  comparison:
+    metric: tflops
+    precision: fp4
+    baseline_source: flydsl_fp4_stock_bk256
+    cross_precision_metric: latency_us
+
+  flops:
+    kind: moe_stage1_gate_up
+    per_stage: true
+    notes: "gate_up is one fused projection with width inter_dim*2. FLOPS = 2 * M * topk * (inter_dim*2) * model_dim"
+    variables:
+      m: tokens
+      n: inter_dim_x2
+      k: dim
+      topk: topk
+
+  gpu:
+    isolation: rocr_visible_devices
+    memory_limit_gb: 64
